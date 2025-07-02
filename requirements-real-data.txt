@@ -1,0 +1,6 @@
+# Additional dependencies for real data testing
+requests>=2.25.0
+matplotlib>=3.3.0
+seaborn>=0.11.0
+openpyxl>=3.0.0
+xlrd>=2.0.0 

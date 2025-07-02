@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About - Medical Data Validator</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .hero-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 80px 0;
+        }
+        .feature-card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+            margin-bottom: 30px;
+        }
+        .feature-card:hover {
+            transform: translateY(-5px);
+        }
+        .feature-icon {
+            font-size: 3rem;
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+        .developer-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border-radius: 20px;
+            padding: 40px;
+            margin: 30px 0;
+        }
+        .social-links a {
+            color: white;
+            font-size: 1.5rem;
+            margin: 0 10px;
+            transition: transform 0.3s ease;
+        }
+        .social-links a:hover {
+            transform: scale(1.2);
+        }
+        .timeline {
+            position: relative;
+            padding: 20px 0;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 50%;
+            width: 2px;
+            height: 100%;
+            background: #667eea;
+        }
+        .timeline-item {
+            margin-bottom: 30px;
+            position: relative;
+        }
+        .timeline-content {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            width: 45%;
+        }
+        .timeline-item:nth-child(odd) .timeline-content {
+            float: left;
+        }
+        .timeline-item:nth-child(even) .timeline-content {
+            float: right;
+        }
+        .timeline-item::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 20px;
+            width: 20px;
+            height: 20px;
+            background: #667eea;
+            border-radius: 50%;
+            transform: translateX(-50%);
+        }
+        .clearfix::after {
+            content: '';
+            display: table;
+            clear: both;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-shield-alt"></i> Medical Data Validator
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">
+                            <i class="fas fa-home"></i> Home
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/about">
+                            <i class="fas fa-info-circle"></i> About
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <div class="hero-section">
+        <div class="container text-center">
+            <h1 class="display-4 mb-4">
+                <i class="fas fa-shield-alt"></i> Medical Data Validator
+            </h1>
+            <p class="lead mb-4">Comprehensive validation framework for healthcare datasets</p>
+            <p class="mb-0">Ensuring data quality, privacy, and compliance in medical research and clinical applications</p>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container my-5">
+        <!-- Project Overview -->
+        <div class="row mb-5">
+            <div class="col-12 text-center">
+                <h2 class="mb-4">About the Project</h2>
+                <p class="lead">Medical Data Validator is an open-source Python package designed to validate healthcare datasets with comprehensive checks for data quality, privacy, and regulatory compliance.</p>
+            </div>
+        </div>
+
+        <!-- Features -->
+        <div class="row mb-5">
+            <div class="col-12">
+                <h3 class="text-center mb-4">Key Features</h3>
+            </div>
+            <div class="col-md-4">
+                <div class="card feature-card text-center h-100">
+                    <div class="card-body">
+                        <i class="fas fa-user-shield feature-icon"></i>
+                        <h5 class="card-title">PHI/PII Detection</h5>
+                        <p class="card-text">Automatically detect and flag personally identifiable information and protected health information in your datasets.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card feature-card text-center h-100">
+                    <div class="card-body">
+                        <i class="fas fa-check-circle feature-icon"></i>
+                        <h5 class="card-title">Data Quality Checks</h5>
+                        <p class="card-text">Comprehensive validation of data completeness, consistency, and accuracy with detailed reporting.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card feature-card text-center h-100">
+                    <div class="card-body">
+                        <i class="fas fa-code feature-icon"></i>
+                        <h5 class="card-title">Medical Code Validation</h5>
+                        <p class="card-text">Validate ICD-10, LOINC, and CPT codes against standard medical coding systems.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-5">
+            <div class="col-md-4">
+                <div class="card feature-card text-center h-100">
+                    <div class="card-body">
+                        <i class="fas fa-calendar-alt feature-icon"></i>
+                        <h5 class="card-title">Date Validation</h5>
+                        <p class="card-text">Validate date formats and ranges, ensuring temporal consistency in medical records.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card feature-card text-center h-100">
+                    <div class="card-body">
+                        <i class="fas fa-chart-line feature-icon"></i>
+                        <h5 class="card-title">Interactive Dashboard</h5>
+                        <p class="card-text">Web-based interface with visualizations and real-time validation results.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card feature-card text-center h-100">
+                    <div class="card-body">
+                        <i class="fas fa-terminal feature-icon"></i>
+                        <h5 class="card-title">CLI Interface</h5>
+                        <p class="card-text">Command-line interface for batch processing and integration into existing workflows.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- How to Use -->
+        <div class="row mb-5">
+            <div class="col-12">
+                <h3 class="text-center mb-4">How to Use</h3>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-globe"></i> Web Dashboard</h5>
+                    </div>
+                    <div class="card-body">
+                        <ol>
+                            <li>Upload your medical dataset (CSV, Excel, JSON, or Parquet)</li>
+                            <li>Select validation options (PHI detection, quality checks)</li>
+                            <li>Choose a validation profile if applicable</li>
+                            <li>Click "Start Validation" to process your data</li>
+                            <li>Review results with interactive charts and detailed reports</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-terminal"></i> Command Line</h5>
+                    </div>
+                    <div class="card-body">
+                        <pre><code># Install the package
+pip install medical-data-validator
+
+# Validate a dataset
+medical-validator validate data.csv --output json
+
+# Run with specific options
+medical-validator validate data.csv \
+    --detect-phi \
+    --quality-checks \
+    --profile clinical_trials \
+    --output summary</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Who Can Use -->
+        <div class="row mb-5">
+            <div class="col-12">
+                <h3 class="text-center mb-4">Who Can Use This Tool</h3>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <i class="fas fa-user-md fa-2x text-primary mb-3"></i>
+                        <h5>Healthcare Researchers</h5>
+                        <p class="card-text">Validate research datasets before analysis and publication.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <i class="fas fa-hospital fa-2x text-primary mb-3"></i>
+                        <h5>Clinical Data Managers</h5>
+                        <p class="card-text">Ensure data quality and compliance in clinical trials and patient records.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <i class="fas fa-laptop-code fa-2x text-primary mb-3"></i>
+                        <h5>Data Scientists</h5>
+                        <p class="card-text">Preprocess and validate medical datasets for machine learning applications.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <i class="fas fa-shield-alt fa-2x text-primary mb-3"></i>
+                        <h5>Compliance Officers</h5>
+                        <p class="card-text">Verify HIPAA compliance and data privacy requirements.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- What It Can Do -->
+        <div class="row mb-5">
+            <div class="col-12">
+                <h3 class="text-center mb-4">What It Can Do</h3>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-list-check"></i> Validation Capabilities</h5>
+                    </div>
+                    <div class="card-body">
+                        <ul>
+                            <li><strong>Schema Validation:</strong> Verify data structure and column types</li>
+                            <li><strong>PHI/PII Detection:</strong> Identify sensitive personal information</li>
+                            <li><strong>Data Quality:</strong> Check for missing values, duplicates, and outliers</li>
+                            <li><strong>Medical Codes:</strong> Validate ICD-10, LOINC, and CPT codes</li>
+                            <li><strong>Date Validation:</strong> Ensure proper date formats and ranges</li>
+                            <li><strong>Range Checks:</strong> Validate numerical values against medical ranges</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-file-export"></i> Output Formats</h5>
+                    </div>
+                    <div class="card-body">
+                        <ul>
+                            <li><strong>JSON Reports:</strong> Detailed validation results in JSON format</li>
+                            <li><strong>Summary Reports:</strong> High-level overview of validation status</li>
+                            <li><strong>Interactive Charts:</strong> Visual representation of data quality issues</li>
+                            <li><strong>CSV Exports:</strong> Export validation results for further analysis</li>
+                            <li><strong>HTML Reports:</strong> Web-friendly detailed reports</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Developer Information -->
+        <div class="developer-card text-center">
+            <h3 class="mb-4">About the Developer</h3>
+            <div class="row">
+                <div class="col-md-8 mx-auto">
+                    <h4>Rana Ehtasham Ali</h4>
+                    <p class="lead mb-4">Senior Software Engineer</p>
+                    <p class="mb-4">Passionate about developing tools that improve healthcare data quality and patient outcomes. This project demonstrates expertise in healthcare technology and data validation.</p>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-phone"></i> Contact</h6>
+                            <p>+92 322 471 2517</p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-envelope"></i> Email</h6>
+                            <p>ranaehtashamali1@gmail.com</p>
+                        </div>
+                    </div>
+                    
+                    <div class="social-links">
+                        <a href="https://www.linkedin.com/in/ranaehtashamali/" target="_blank" title="LinkedIn">
+                            <i class="fab fa-linkedin"></i>
+                        </a>
+                        <a href="https://github.com/RanaEhtashamAli" target="_blank" title="GitHub">
+                            <i class="fab fa-github"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Project Timeline -->
+        <div class="row mb-5">
+            <div class="col-12">
+                <h3 class="text-center mb-4">Project Development Timeline</h3>
+                <div class="timeline">
+                    <div class="timeline-item clearfix">
+                        <div class="timeline-content">
+                            <h5>Core Framework Development</h5>
+                            <p>Built the foundational validation engine with modular architecture</p>
+                        </div>
+                    </div>
+                    <div class="timeline-item clearfix">
+                        <div class="timeline-content">
+                            <h5>Validator Implementation</h5>
+                            <p>Developed specialized validators for PHI detection, data quality, and medical codes</p>
+                        </div>
+                    </div>
+                    <div class="timeline-item clearfix">
+                        <div class="timeline-content">
+                            <h5>CLI Interface</h5>
+                            <p>Created command-line interface for batch processing and automation</p>
+                        </div>
+                    </div>
+                    <div class="timeline-item clearfix">
+                        <div class="timeline-content">
+                            <h5>Web Dashboard</h5>
+                            <p>Built interactive web interface with real-time validation and visualizations</p>
+                        </div>
+                    </div>
+                    <div class="timeline-item clearfix">
+                        <div class="timeline-content">
+                            <h5>Testing & Documentation</h5>
+                            <p>Comprehensive testing with real medical datasets and complete documentation</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Call to Action -->
+        <div class="row">
+            <div class="col-12 text-center">
+                <div class="card bg-primary text-white">
+                    <div class="card-body">
+                        <h4 class="mb-3">Ready to Validate Your Medical Data?</h4>
+                        <p class="mb-4">Start using the Medical Data Validator today to ensure your healthcare datasets meet quality and compliance standards.</p>
+                        <a href="/" class="btn btn-light btn-lg">
+                            <i class="fas fa-play"></i> Start Validation
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-dark text-white text-center py-4 mt-5">
+        <div class="container">
+            <p>&copy; 2025 Medical Data Validator. Open source project for healthcare data validation.</p>
+            <p>Developed by Rana Ehtasham Ali | <a href="https://github.com/RanaEhtashamAli/medical-data-validator" class="text-light">View on GitHub</a></p>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 

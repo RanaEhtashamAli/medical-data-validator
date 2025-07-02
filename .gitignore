@@ -1,0 +1,484 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# Medical Data Validator specific
+logs/
+*.log
+api.log
+dashboard.log
+test_results/
+benchmark_results/
+real_data_results/
+downloads/
+uploads/
+temp/
+tmp/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker
+.dockerignore
+
+# SSL certificates
+*.pem
+*.key
+*.crt
+*.csr
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Configuration files with secrets
+config.ini
+secrets.json
+.env.local
+.env.production
+
+# Large data files (generated during testing)
+*.csv
+*.xlsx
+*.xls
+*.json
+*.parquet
+!example_data/*.csv
+!test_data/*.csv
+!real_datasets/*.csv
+
+# Generated reports
+reports/
+exports/
+outputs/
+
+# Cache
+.cache/
+cache/
+
+# Generated test result files with timestamps
+*_test_report_*.txt
+*_test_results_*.json
+*_benchmark_report_*.txt
+*_benchmark_results_*.json
+*_real_data_report_*.txt
+*_real_data_results_*.json
+*_downloaded_data_report_*.txt
+*_downloaded_data_results_*.json
+
+# Specific generated files
+covid19_validation.json
+
+# Benchmark cache
+.benchmarks/
+
+# GitHub Actions artifacts
+.github/workflows/artifacts/
+
+# Temporary files
+*.tmp
+*.temp
+temp_*
+tmp_*
+
+# Profiling data
+*.prof
+*.profile
+
+# Memory dumps
+*.dump
+*.dmp
+
+# Performance data
+*.perf
+*.perfdata
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# RStudio
+.Rproj.user/
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Visual Studio Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# PyCharm
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Eclipse
+.metadata
+bin/
+tmp/
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+.settings/
+.loadpath
+.recommenders
+
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# VS Code
+.vscode/
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msm
+*.msp
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# Node.js (if any frontend components)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.eslintcache
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# nyc test coverage
+.nyc_output
+
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variables file
+.env.test
+
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
+
+# Next.js build output
+.next
+
+# Nuxt.js build / generate output
+.nuxt
+dist
+
+# Gatsby files
+.cache/
+public
+
+# Storybook build outputs
+.out
+.storybook-out
+
+# Temporary folders
+tmp/
+temp/
+
+# Editor directories and files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Project-specific exclusions
+# Keep example data files but ignore generated ones
+real_datasets/*.csv
+!real_datasets/example_*.csv
+!real_datasets/sample_*.csv
+
+# Keep test data but ignore generated test results
+test_data/*.csv
+!test_data/generated_*.csv
+
+# Keep documentation but ignore generated docs
+docs/_build/
+docs/api/
+
+# Keep configuration but ignore secrets
+config/
+!config/secrets/
+!config/local/
+
+# Keep logs directory structure but ignore log files
+logs/
+!logs/.gitkeep
+
+# Keep uploads directory structure but ignore uploaded files
+uploads/
+!uploads/.gitkeep
+
+# Keep temp directory structure but ignore temp files
+temp/
+tmp/
+!temp/.gitkeep
+!tmp/.gitkeep
+
+# Test runner and utility scripts (not core source code)
+test_imports.py
+test_linter.py
+run_api_tests.py
+run_simple_web_tests.py
+run_web_ui_tests.py
+run_enhanced_benchmarks.py
+run_real_benchmarks.py
+
+# Shell and batch test scripts
+test_api.sh
+test_api.bat
+
+# Real data testing scripts (utilities, not core functionality)
+test_real_datasets.py
+test_real_datasets_simple.py
+test_real_data.py
+test_downloaded_datasets.py
+download_real_datasets.py
+
+# Generated test result files
+covid19_validation.json 

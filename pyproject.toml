@@ -1,0 +1,260 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "medical-data-validator"
+version = "0.1.0"
+description = "A comprehensive medical data validation library for healthcare datasets"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Rana Ehtasham Ali", email = "ranaehtashamali1@gmail.com"}
+]
+maintainers = [
+    {name = "Rana Ehtasham Ali", email = "ranaehtashamali1@gmail.com"}
+]
+keywords = ["medical", "healthcare", "data", "validation", "phi", "pii", "quality"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Healthcare Industry",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Text Processing :: Filters",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "pandas>=1.5.0",
+    "pydantic>=2.0.0",
+    "numpy>=1.21.0",
+    "openpyxl>=3.0.0",
+    "requests>=2.25.0",
+    "urllib3>=1.26.0",
+]
+
+[project.optional-dependencies]
+# Core CLI functionality
+cli = [
+    "click>=8.0.0",
+    "rich>=13.0.0",
+    "tabulate>=0.9.0",
+]
+
+# Web dashboard interface
+web = [
+    "flask>=2.3.0",
+    "flask-cors>=4.0.0",
+    "plotly>=5.15.0",
+    "dash>=2.14.0",
+    "dash-bootstrap-components>=1.5.0",
+    "gunicorn>=21.0.0",
+    "python-dotenv>=1.0.0",
+    "werkzeug>=2.3.0",
+]
+
+# REST API functionality (now part of Flask app)
+api = [
+    "flask>=2.3.0",
+    "flask-cors>=4.0.0",
+    "python-multipart>=0.0.6",
+]
+
+# All web interfaces (dashboard + API)
+web-all = [
+    "flask>=2.3.0",
+    "flask-cors>=4.0.0",
+    "plotly>=5.15.0",
+    "dash>=2.14.0",
+    "dash-bootstrap-components>=1.5.0",
+    "gunicorn>=21.0.0",
+    "python-dotenv>=1.0.0",
+    "werkzeug>=2.3.0",
+]
+
+# Complete installation (core + CLI + web + API)
+all = [
+    "click>=8.0.0",
+    "rich>=13.0.0",
+    "tabulate>=0.9.0",
+    "flask>=2.3.0",
+    "flask-cors>=4.0.0",
+    "plotly>=5.15.0",
+    "dash>=2.14.0",
+    "dash-bootstrap-components>=1.5.0",
+    "gunicorn>=21.0.0",
+    "python-dotenv>=1.0.0",
+    "werkzeug>=2.3.0",
+]
+
+# Development dependencies
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+    "bandit>=1.7.0",
+    "safety>=2.0.0",
+    "pre-commit>=3.0.0",
+]
+
+# Documentation dependencies
+docs = [
+    "sphinx>=6.0.0",
+    "sphinx-rtd-theme>=1.2.0",
+    "myst-parser>=1.0.0",
+    "sphinx-autodoc-typehints>=1.23.0",
+]
+
+# Testing dependencies
+test = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "pytest-benchmark>=4.0.0",
+    "selenium>=4.0.0",
+    "webdriver-manager>=4.0.0",
+    "matplotlib>=3.3.0",
+    "seaborn>=0.11.0",
+    "xlrd>=2.0.0",
+]
+
+# Legacy dashboard option (for backward compatibility)
+dashboard = [
+    "flask>=2.3.0",
+    "flask-cors>=4.0.0",
+    "plotly>=5.15.0",
+    "dash>=2.14.0",
+    "dash-bootstrap-components>=1.5.0",
+    "gunicorn>=21.0.0",
+    "python-dotenv>=1.0.0",
+    "werkzeug>=2.3.0",
+]
+
+# Real data testing dependencies
+real-data = [
+    "requests>=2.25.0",
+    "matplotlib>=3.3.0",
+    "seaborn>=0.11.0",
+    "xlrd>=2.0.0",
+    "urllib3>=1.26.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/RanaEhtashamAli/medical-data-validator"
+Documentation = "https://medical-data-validator.readthedocs.io/"
+Repository = "https://github.com/RanaEhtashamAli/medical-data-validator"
+"Bug Tracker" = "https://github.com/RanaEhtashamAli/medical-data-validator/issues"
+"PyPI" = "https://pypi.org/project/medical-data-validator/"
+
+[project.scripts]
+medical-validator = "medical_data_validator_cli:main"
+
+[project.entry-points."console_scripts"]
+medical-validator = "medical_data_validator_cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["medical_data_validator*"]
+
+[tool.setuptools.package-data]
+medical_data_validator = ["py.typed"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["medical_data_validator"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "pandas.*",
+    "numpy.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --strict-markers --strict-config"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
+
+[tool.coverage.run]
+source = ["medical_data_validator"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+    "*/migrations/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+skips = ["B101", "B601"]
+
+[tool.safety]
+output = "json" 

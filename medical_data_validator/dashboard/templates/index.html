@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Data Validator Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .upload-area {
+            border: 2px dashed #007bff;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            background-color: #f8f9fa;
+            transition: all 0.3s ease;
+        }
+        .upload-area:hover {
+            border-color: #0056b3;
+            background-color: #e9ecef;
+        }
+        .upload-area.dragover {
+            border-color: #28a745;
+            background-color: #d4edda;
+        }
+        .result-card {
+            border-left: 4px solid #007bff;
+        }
+        .result-card.error {
+            border-left-color: #dc3545;
+        }
+        .result-card.warning {
+            border-left-color: #ffc107;
+        }
+        .result-card.success {
+            border-left-color: #28a745;
+        }
+        .chart-container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 10px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .loading {
+            display: none;
+        }
+        .loading.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-shield-alt"></i> Medical Data Validator
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/">
+                            <i class="fas fa-home"></i> Home
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/about">
+                            <i class="fas fa-info-circle"></i> About
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <!-- Header -->
+        <div class="row bg-primary text-white py-4">
+            <div class="col-12 text-center">
+                <h1><i class="fas fa-shield-alt"></i> Medical Data Validator Dashboard</h1>
+                <p class="lead">Comprehensive validation for healthcare datasets with interactive visualizations</p>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="row mt-4">
+            <div class="col-lg-8 mx-auto">
+                <!-- Upload Section -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-upload"></i> Upload Medical Dataset</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="uploadForm" enctype="multipart/form-data">
+                            <div class="upload-area" id="uploadArea">
+                                <i class="fas fa-cloud-upload-alt fa-3x text-primary mb-3"></i>
+                                <h5>Drag and drop your file here</h5>
+                                <p class="text-muted">or click to browse</p>
+                                <button type="button" class="btn btn-primary" id="chooseFileBtn">
+                                    <i class="fas fa-folder-open"></i> Choose File
+                                </button>
+                            </div>
+                            
+                            <!-- Keep file input in form but hidden -->
+                            <input type="file" id="fileInput" name="file" accept=".csv,.xlsx,.xls,.json,.parquet" style="display: none;">
+                            
+                            <div class="mt-4">
+                                <h6>Validation Options:</h6>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="checkbox" id="detectPhi" name="detect_phi" checked>
+                                    <label class="form-check-label" for="detectPhi">
+                                        <i class="fas fa-user-shield"></i> Detect PHI/PII
+                                    </label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="checkbox" id="qualityChecks" name="quality_checks" checked>
+                                    <label class="form-check-label" for="qualityChecks">
+                                        <i class="fas fa-check-circle"></i> Quality Checks
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-3">
+                                <label for="profileSelect" class="form-label">Validation Profile (Optional):</label>
+                                <select class="form-select" id="profileSelect" name="profile">
+                                    <option value="">Select a profile...</option>
+                                    <option value="clinical_trials">Clinical Trials</option>
+                                    <option value="ehr">Electronic Health Records</option>
+                                    <option value="imaging">Medical Imaging</option>
+                                    <option value="lab">Laboratory Data</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mt-4 text-center">
+                                <button type="submit" class="btn btn-success btn-lg" id="validateBtn">
+                                    <i class="fas fa-play"></i> Start Validation
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Loading Indicator -->
+                <div class="loading text-center mt-4" id="loadingIndicator">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Validating your data...</p>
+                </div>
+
+                <!-- Results Section -->
+                <div id="resultsSection" style="display: none;">
+                    <!-- Summary Cards -->
+                    <div class="row mt-4" id="summaryCards">
+                        <!-- Summary cards will be inserted here -->
+                    </div>
+
+                    <!-- Charts -->
+                    <div class="row mt-4">
+                        <div class="col-md-6">
+                            <div class="chart-container">
+                                <h6><i class="fas fa-chart-pie"></i> Issues by Severity</h6>
+                                <div id="severityChart"></div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="chart-container">
+                                <h6><i class="fas fa-chart-bar"></i> Issues by Column</h6>
+                                <div id="columnChart"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mt-4">
+                        <div class="col-md-6">
+                            <div class="chart-container">
+                                <h6><i class="fas fa-chart-bar"></i> Missing Values</h6>
+                                <div id="missingChart"></div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="chart-container">
+                                <h6><i class="fas fa-chart-pie"></i> Data Types</h6>
+                                <div id="dtypeChart"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Detailed Issues -->
+                    <div class="card mt-4">
+                        <div class="card-header">
+                            <h5><i class="fas fa-list"></i> Detailed Issues</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="issuesList">
+                                <!-- Issues will be inserted here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-dark text-white text-center py-4 mt-5">
+        <div class="container">
+            <p>&copy; 2025 Medical Data Validator. Open source project for healthcare data validation.</p>
+            <p>Developed by Rana Ehtasham Ali</p>
+            <div class="mt-2">
+                <a href="https://www.linkedin.com/in/ranaehtashamali/" target="_blank" class="text-light me-3" title="LinkedIn">
+                    <i class="fab fa-linkedin fa-lg"></i> LinkedIn
+                </a>
+                <a href="https://github.com/RanaEhtashamAli" target="_blank" class="text-light me-3" title="GitHub">
+                    <i class="fab fa-github fa-lg"></i> GitHub
+                </a>
+                <a href="https://github.com/RanaEhtashamAli/medical-data-validator" target="_blank" class="text-light" title="Project Repository">
+                    <i class="fas fa-code fa-lg"></i> View Project
+                </a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script>
+        // File upload handling
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const uploadForm = document.getElementById('uploadForm');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const resultsSection = document.getElementById('resultsSection');
+        const chooseFileBtn = document.getElementById('chooseFileBtn');
+
+        // Drag and drop functionality
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                fileInput.dispatchEvent(new Event('change'));
+            }
+        });
+
+        // File selection via button
+        chooseFileBtn.addEventListener('click', () => {
+            fileInput.value = '';
+            fileInput.click();
+        });
+
+        // File selection via input
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                const file = e.target.files[0];
+                uploadArea.innerHTML = `
+                    <i class="fas fa-file-alt fa-3x text-success mb-3"></i>
+                    <h5>${file.name}</h5>
+                    <p class="text-muted">${(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                    <button type="button" class="btn btn-outline-primary" id="changeFileBtn">
+                        <i class="fas fa-edit"></i> Change File
+                    </button>
+                `;
+                // Re-attach the event listener for the new button
+                setTimeout(() => {
+                    document.getElementById('changeFileBtn').addEventListener('click', () => {
+                        fileInput.value = '';
+                        fileInput.click();
+                    });
+                }, 0);
+            }
+        });
+
+        // Form submission
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(uploadForm);
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Please select a file first.');
+                return;
+            }
+
+            // Show loading
+            loadingIndicator.classList.add('show');
+            resultsSection.style.display = 'none';
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    displayResults(result);
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                loadingIndicator.classList.remove('show');
+            }
+        });
+
+        function displayResults(data) {
+            const { summary, charts, result } = data;
+            
+            // Display summary cards
+            displaySummaryCards(summary);
+            
+            // Display charts
+            if (charts.severity_distribution) {
+                Plotly.newPlot('severityChart', charts.severity_distribution.data, charts.severity_distribution.layout);
+            }
+            if (charts.column_issues) {
+                Plotly.newPlot('columnChart', charts.column_issues.data, charts.column_issues.layout);
+            }
+            if (charts.missing_values) {
+                Plotly.newPlot('missingChart', charts.missing_values.data, charts.missing_values.layout);
+            }
+            if (charts.data_types) {
+                Plotly.newPlot('dtypeChart', charts.data_types.data, charts.data_types.layout);
+            }
+            
+            // Display detailed issues
+            displayIssues(result.issues);
+            
+            // Show results section
+            resultsSection.style.display = 'block';
+        }
+
+        function displaySummaryCards(summary) {
+            const summaryCards = document.getElementById('summaryCards');
+            const statusClass = summary.is_valid ? 'success' : 'error';
+            const statusIcon = summary.is_valid ? 'fas fa-check-circle' : 'fas fa-exclamation-triangle';
+            
+            summaryCards.innerHTML = `
+                <div class="col-md-3">
+                    <div class="card result-card ${statusClass}">
+                        <div class="card-body text-center">
+                            <i class="${statusIcon} fa-2x text-${statusClass === 'success' ? 'success' : 'danger'}"></i>
+                            <h5 class="card-title mt-2">Status</h5>
+                            <p class="card-text">${summary.is_valid ? 'Valid' : 'Invalid'}</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card result-card">
+                        <div class="card-body text-center">
+                            <i class="fas fa-table fa-2x text-primary"></i>
+                            <h5 class="card-title mt-2">Data Size</h5>
+                            <p class="card-text">${summary.total_rows.toLocaleString()} rows × ${summary.total_columns} cols</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card result-card">
+                        <div class="card-body text-center">
+                            <i class="fas fa-exclamation-triangle fa-2x text-warning"></i>
+                            <h5 class="card-title mt-2">Total Issues</h5>
+                            <p class="card-text">${summary.total_issues}</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card result-card">
+                        <div class="card-body text-center">
+                            <i class="fas fa-times-circle fa-2x text-danger"></i>
+                            <h5 class="card-title mt-2">Errors</h5>
+                            <p class="card-text">${summary.error_count}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function displayIssues(issues) {
+            const issuesList = document.getElementById('issuesList');
+            
+            if (issues.length === 0) {
+                issuesList.innerHTML = '<div class="alert alert-success">No issues found! Your data is clean.</div>';
+                return;
+            }
+
+            const issuesHtml = issues.map((issue, index) => {
+                const severityClass = {
+                    'error': 'danger',
+                    'warning': 'warning',
+                    'info': 'info'
+                }[issue.severity];
+                
+                const severityIcon = {
+                    'error': 'fas fa-times-circle',
+                    'warning': 'fas fa-exclamation-triangle',
+                    'info': 'fas fa-info-circle'
+                }[issue.severity];
+
+                return `
+                    <div class="alert alert-${severityClass} d-flex align-items-start">
+                        <i class="${severityIcon} me-2 mt-1"></i>
+                        <div>
+                            <strong>${issue.severity.toUpperCase()}:</strong> ${issue.message}
+                            ${issue.column ? `<br><small class="text-muted">Column: ${issue.column}</small>` : ''}
+                            ${issue.row ? `<br><small class="text-muted">Row: ${issue.row}</small>` : ''}
+                            ${issue.value ? `<br><small class="text-muted">Value: ${issue.value}</small>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            issuesList.innerHTML = issuesHtml;
+        }
+    </script>
+</body>
+</html>
