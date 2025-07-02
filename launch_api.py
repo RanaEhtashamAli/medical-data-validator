@@ -6,6 +6,7 @@ This script ensures proper imports and launches the API server.
 
 import sys
 import os
+from flask import redirect
 
 # Add the project root to Python path
 project_root = os.path.dirname(os.path.abspath(__file__))
@@ -25,6 +26,11 @@ def main():
         args = parser.parse_args()
         
         app = create_dashboard_app()
+        
+        # Add redirect for Swagger UI compatibility
+        @app.route('/swagger.json')
+        def root_swagger_json():
+            return redirect('/docs/swagger.json')
         
         if args.debug:
             app.config['DEBUG'] = True
