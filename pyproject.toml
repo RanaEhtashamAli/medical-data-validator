@@ -65,6 +65,10 @@ api = [
     "flask>=2.3.0",
     "flask-cors>=4.0.0",
     "python-multipart>=0.0.6",
+    "flask-restx>=1.1.0",
+    "apispec>=6.0.0",
+    "marshmallow>=3.19.0",
+    "markdown>=3.4.0",
 ]
 
 # All web interfaces (dashboard + API)
@@ -77,6 +81,10 @@ web-all = [
     "gunicorn>=21.0.0",
     "python-dotenv>=1.0.0",
     "werkzeug>=2.3.0",
+    "flask-restx>=1.1.0",
+    "apispec>=6.0.0",
+    "marshmallow>=3.19.0",
+    "markdown>=3.4.0",
 ]
 
 # Complete installation (core + CLI + web + API)
@@ -92,6 +100,10 @@ all = [
     "gunicorn>=21.0.0",
     "python-dotenv>=1.0.0",
     "werkzeug>=2.3.0",
+    "flask-restx>=1.1.0",
+    "apispec>=6.0.0",
+    "marshmallow>=3.19.0",
+    "markdown>=3.4.0",
 ]
 
 # Development dependencies

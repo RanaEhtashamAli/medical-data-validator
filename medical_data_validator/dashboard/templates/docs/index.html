@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Data Validator - Documentation</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .hero-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 4rem 0;
+        }
+        .feature-card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+        .feature-card:hover {
+            transform: translateY(-5px);
+        }
+        .nav-pills .nav-link {
+            border-radius: 25px;
+            margin: 0.25rem;
+        }
+        .code-block {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-shield-alt"></i> Medical Data Validator
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/docs">Documentation</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/about">About</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="container text-center">
+            <h1 class="display-4 mb-4">
+                <i class="fas fa-book-medical"></i> Documentation
+            </h1>
+            <p class="lead mb-4">
+                Comprehensive guide to using the Medical Data Validator API and tools
+            </p>
+            <div class="row justify-content-center">
+                <div class="col-md-8">
+                    <div class="d-flex justify-content-center gap-3">
+                        <a href="/docs/api" class="btn btn-light btn-lg">
+                            <i class="fas fa-code"></i> API Reference
+                        </a>
+                        <a href="/docs/swagger" class="btn btn-outline-light btn-lg">
+                            <i class="fas fa-play"></i> Interactive API
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Documentation Sections -->
+    <section class="py-5">
+        <div class="container">
+            <div class="row">
+                <!-- Quick Start -->
+                <div class="col-lg-4 mb-4">
+                    <div class="card feature-card h-100">
+                        <div class="card-body text-center">
+                            <div class="mb-3">
+                                <i class="fas fa-rocket fa-3x text-primary"></i>
+                            </div>
+                            <h5 class="card-title">Quick Start</h5>
+                            <p class="card-text">
+                                Get up and running with the Medical Data Validator in minutes.
+                            </p>
+                            <ul class="list-unstyled text-start">
+                                <li><i class="fas fa-check text-success"></i> Installation guide</li>
+                                <li><i class="fas fa-check text-success"></i> Basic usage examples</li>
+                                <li><i class="fas fa-check text-success"></i> Configuration setup</li>
+                            </ul>
+                            <a href="/docs/markdown/API_DOCUMENTATION.md" class="btn btn-primary">
+                                Get Started
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- API Reference -->
+                <div class="col-lg-4 mb-4">
+                    <div class="card feature-card h-100">
+                        <div class="card-body text-center">
+                            <div class="mb-3">
+                                <i class="fas fa-code fa-3x text-success"></i>
+                            </div>
+                            <h5 class="card-title">API Reference</h5>
+                            <p class="card-text">
+                                Complete API documentation with examples and response formats.
+                            </p>
+                            <ul class="list-unstyled text-start">
+                                <li><i class="fas fa-check text-success"></i> All endpoints documented</li>
+                                <li><i class="fas fa-check text-success"></i> Request/response examples</li>
+                                <li><i class="fas fa-check text-success"></i> Error handling guide</li>
+                            </ul>
+                            <a href="/docs/api" class="btn btn-success">
+                                View API Docs
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Interactive API -->
+                <div class="col-lg-4 mb-4">
+                    <div class="card feature-card h-100">
+                        <div class="card-body text-center">
+                            <div class="mb-3">
+                                <i class="fas fa-play-circle fa-3x text-info"></i>
+                            </div>
+                            <h5 class="card-title">Interactive API</h5>
+                            <p class="card-text">
+                                Test API endpoints directly from your browser with Swagger UI.
+                            </p>
+                            <ul class="list-unstyled text-start">
+                                <li><i class="fas fa-check text-success"></i> Live API testing</li>
+                                <li><i class="fas fa-check text-success"></i> Request builder</li>
+                                <li><i class="fas fa-check text-success"></i> Response validation</li>
+                            </ul>
+                            <a href="/docs/swagger" class="btn btn-info">
+                                Try API
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Quick Examples -->
+    <section class="py-5 bg-light">
+        <div class="container">
+            <h2 class="text-center mb-5">Quick Examples</h2>
+            <div class="row">
+                <div class="col-md-6 mb-4">
+                    <h5><i class="fas fa-terminal"></i> cURL Examples</h5>
+                    <div class="code-block">
+                        <small class="text-muted">Health Check</small><br>
+                        <code>curl -X GET "http://localhost:8000/api/health"</code>
+                    </div>
+                    <div class="code-block mt-2">
+                        <small class="text-muted">Validate Data</small><br>
+                        <code>curl -X POST "http://localhost:8000/api/validate/data" \<br>
+                        &nbsp;&nbsp;-H "Content-Type: application/json" \<br>
+                        &nbsp;&nbsp;-d '{"patient_id": ["P001"], "age": [30]}'</code>
+                    </div>
+                    <a href="/docs/markdown/API_CURL_EXAMPLES.md" class="btn btn-outline-primary btn-sm mt-2">
+                        View All Examples
+                    </a>
+                </div>
+                <div class="col-md-6 mb-4">
+                    <h5><i class="fab fa-python"></i> Python Examples</h5>
+                    <div class="code-block">
+                        <small class="text-muted">Basic Usage</small><br>
+                        <code>import requests<br><br>
+                        response = requests.post(<br>
+                        &nbsp;&nbsp;"http://localhost:8000/api/validate/data",<br>
+                        &nbsp;&nbsp;json={"patient_id": ["P001"], "age": [30]}<br>
+                        )<br><br>
+                        result = response.json()</code>
+                    </div>
+                    <a href="/docs/markdown/API_DOCUMENTATION.md" class="btn btn-outline-success btn-sm mt-2">
+                        View Python Guide
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features -->
+    <section class="py-5">
+        <div class="container">
+            <h2 class="text-center mb-5">Key Features</h2>
+            <div class="row">
+                <div class="col-md-3 mb-4 text-center">
+                    <i class="fas fa-shield-alt fa-2x text-primary mb-3"></i>
+                    <h6>HIPAA Compliance</h6>
+                    <small class="text-muted">PHI/PII detection and privacy protection</small>
+                </div>
+                <div class="col-md-3 mb-4 text-center">
+                    <i class="fas fa-stethoscope fa-2x text-success mb-3"></i>
+                    <h6>Medical Standards</h6>
+                    <small class="text-muted">ICD-10, LOINC, CPT, FHIR validation</small>
+                </div>
+                <div class="col-md-3 mb-4 text-center">
+                    <i class="fas fa-chart-line fa-2x text-info mb-3"></i>
+                    <h6>Data Quality</h6>
+                    <small class="text-muted">Completeness, accuracy, consistency checks</small>
+                </div>
+                <div class="col-md-3 mb-4 text-center">
+                    <i class="fas fa-file-upload fa-2x text-warning mb-3"></i>
+                    <h6>File Support</h6>
+                    <small class="text-muted">CSV, Excel, JSON, Parquet formats</small>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-dark text-light py-4">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Medical Data Validator</h6>
+                    <p class="mb-0">Enterprise-grade validation for healthcare datasets</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <p class="mb-0">
+                        <a href="https://github.com/RanaEhtashamAli/medical-data-validator" class="text-light">
+                            <i class="fab fa-github"></i> GitHub
+                        </a>
+                        |
+                        <a href="mailto:ranaehtashamali1@gmail.com" class="text-light">
+                            <i class="fas fa-envelope"></i> Contact
+                        </a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 
