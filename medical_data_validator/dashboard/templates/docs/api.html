@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Data Validator - API Reference</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" rel="stylesheet">
+    <style>
+        .sidebar {
+            position: sticky;
+            top: 20px;
+            height: calc(100vh - 40px);
+            overflow-y: auto;
+        }
+        .endpoint-card {
+            border-left: 4px solid #007bff;
+            margin-bottom: 2rem;
+        }
+        .endpoint-card.get { border-left-color: #28a745; }
+        .endpoint-card.post { border-left-color: #007bff; }
+        .endpoint-card.put { border-left-color: #ffc107; }
+        .endpoint-card.delete { border-left-color: #dc3545; }
+        .method-badge {
+            font-size: 0.8rem;
+            padding: 0.25rem 0.5rem;
+        }
+        .code-example {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        .nav-link {
+            color: #495057;
+            border-radius: 0.375rem;
+            margin-bottom: 0.25rem;
+        }
+        .nav-link:hover {
+            background-color: #e9ecef;
+        }
+        .nav-link.active {
+            background-color: #007bff;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-shield-alt"></i> Medical Data Validator
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/docs">Documentation</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/about">About</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-3 col-lg-2 d-md-block bg-light sidebar">
+                <div class="p-3">
+                    <h6 class="text-muted">API Reference</h6>
+                    <nav class="nav flex-column">
+                        <a class="nav-link" href="#overview">Overview</a>
+                        <a class="nav-link" href="#authentication">Authentication</a>
+                        <a class="nav-link" href="#endpoints">Endpoints</a>
+                        <a class="nav-link" href="#health">Health Check</a>
+                        <a class="nav-link" href="#validate-data">Validate Data</a>
+                        <a class="nav-link" href="#validate-file">Validate File</a>
+                        <a class="nav-link" href="#compliance">Compliance Check</a>
+                        <a class="nav-link" href="#profiles">Profiles</a>
+                        <a class="nav-link" href="#standards">Standards</a>
+                        <a class="nav-link" href="#errors">Error Handling</a>
+                        <a class="nav-link" href="#rate-limiting">Rate Limiting</a>
+                    </nav>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="col-md-9 col-lg-10 ms-sm-auto px-md-4">
+                <div class="pt-3 pb-2 mb-3">
+                    <!-- Overview -->
+                    <section id="overview">
+                        <h1>API Reference</h1>
+                        <p class="lead">
+                            Complete API documentation for the Medical Data Validator service.
+                        </p>
+                        
+                        <div class="alert alert-info">
+                            <h6><i class="fas fa-info-circle"></i> Base URL</h6>
+                            <code>http://localhost:8000/api</code>
+                        </div>
+
+                        <h3>Features</h3>
+                        <ul>
+                            <li><strong>HIPAA Compliance:</strong> PHI/PII detection and privacy protection</li>
+                            <li><strong>Medical Standards:</strong> ICD-10, LOINC, CPT, FHIR, OMOP validation</li>
+                            <li><strong>Data Quality:</strong> Completeness, accuracy, and consistency checks</li>
+                            <li><strong>File Support:</strong> CSV, Excel, JSON, Parquet formats</li>
+                            <li><strong>Real-time Validation:</strong> Instant feedback on data quality</li>
+                        </ul>
+                    </section>
+
+                    <!-- Authentication -->
+                    <section id="authentication">
+                        <h2>Authentication</h2>
+                        <p>
+                            Currently, the API operates without authentication for development. 
+                            For production deployment, implement appropriate authentication mechanisms.
+                        </p>
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <strong>Security Note:</strong> Always use HTTPS in production and implement proper authentication.
+                        </div>
+                    </section>
+
+                    <!-- Endpoints Overview -->
+                    <section id="endpoints">
+                        <h2>Endpoints</h2>
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Method</th>
+                                        <th>Endpoint</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><span class="badge bg-success method-badge">GET</span></td>
+                                        <td><code>/api/health</code></td>
+                                        <td>Health check and API status</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="badge bg-primary method-badge">POST</span></td>
+                                        <td><code>/api/validate/data</code></td>
+                                        <td>Validate JSON data</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="badge bg-primary method-badge">POST</span></td>
+                                        <td><code>/api/validate/file</code></td>
+                                        <td>Upload and validate files</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="badge bg-primary method-badge">POST</span></td>
+                                        <td><code>/api/compliance/check</code></td>
+                                        <td>Quick compliance assessment</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="badge bg-success method-badge">GET</span></td>
+                                        <td><code>/api/profiles</code></td>
+                                        <td>Get validation profiles</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="badge bg-success method-badge">GET</span></td>
+                                        <td><code>/api/standards</code></td>
+                                        <td>Get medical standards info</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <!-- Health Check -->
+                    <section id="health">
+                        <h2>Health Check</h2>
+                        <div class="card endpoint-card get">
+                            <div class="card-header">
+                                <span class="badge bg-success method-badge">GET</span>
+                                <code>/api/health</code>
+                            </div>
+                            <div class="card-body">
+                                <p>Check API status and supported standards.</p>
+                                
+                                <h6>Response</h6>
+                                <pre><code class="language-json">{
+  "status": "healthy",
+  "version": "0.1.0",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "standards_supported": ["icd10", "loinc", "cpt", "icd9", "ndc", "fhir", "omop"]
+}</code></pre>
+
+                                <h6>Example</h6>
+                                <div class="code-example">
+                                    <small class="text-muted">cURL</small><br>
+                                    <code>curl -X GET "http://localhost:8000/api/health"</code>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Validate Data -->
+                    <section id="validate-data">
+                        <h2>Validate Data</h2>
+                        <div class="card endpoint-card post">
+                            <div class="card-header">
+                                <span class="badge bg-primary method-badge">POST</span>
+                                <code>/api/validate/data</code>
+                            </div>
+                            <div class="card-body">
+                                <p>Validate structured JSON data for medical compliance.</p>
+                                
+                                <h6>Request Body</h6>
+                                <pre><code class="language-json">{
+  "patient_id": ["001", "002", "003"],
+  "age": [30, 45, 28],
+  "diagnosis": ["E11.9", "I10", "Z51.11"],
+  "ssn": ["123-45-6789", "987-65-4321", "555-12-3456"]
+}</code></pre>
+
+                                <h6>Query Parameters</h6>
+                                <ul>
+                                    <li><code>detect_phi</code> (boolean): Enable PHI/PII detection (default: true)</li>
+                                    <li><code>quality_checks</code> (boolean): Enable data quality checks (default: true)</li>
+                                    <li><code>profile</code> (string): Validation profile (clinical_trials, ehr, imaging, lab)</li>
+                                    <li><code>standards</code> (array): Medical standards to check (icd10, loinc, cpt, hipaa)</li>
+                                </ul>
+
+                                <h6>Response</h6>
+                                <pre><code class="language-json">{
+  "success": true,
+  "is_valid": false,
+  "total_issues": 3,
+  "error_count": 1,
+  "warning_count": 2,
+  "info_count": 0,
+  "compliance_report": {
+    "hipaa": {
+      "compliant": false,
+      "issues": ["SSN detected in column: ssn"],
+      "score": 50
+    },
+    "icd10": {
+      "compliant": true,
+      "issues": [],
+      "score": 100
+    }
+  },
+  "issues": [
+    {
+      "severity": "error",
+      "description": "SSN detected in column: ssn",
+      "column": "ssn",
+      "row": null,
+      "value": null,
+      "rule_name": "PHIDetector"
+    }
+  ],
+  "summary": {
+    "total_rows": 3,
+    "total_columns": 4,
+    "is_valid": false,
+    "total_issues": 3
+  }
+}</code></pre>
+
+                                <h6>Example</h6>
+                                <div class="code-example">
+                                    <small class="text-muted">cURL</small><br>
+                                    <code>curl -X POST "http://localhost:8000/api/validate/data" \<br>
+&nbsp;&nbsp;-H "Content-Type: application/json" \<br>
+&nbsp;&nbsp;-d '{"patient_id": ["P001"], "age": [30], "diagnosis": ["E11.9"]}'</code>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Validate File -->
+                    <section id="validate-file">
+                        <h2>Validate File</h2>
+                        <div class="card endpoint-card post">
+                            <div class="card-header">
+                                <span class="badge bg-primary method-badge">POST</span>
+                                <code>/api/validate/file</code>
+                            </div>
+                            <div class="card-body">
+                                <p>Upload and validate medical data files (CSV, Excel, JSON, Parquet).</p>
+                                
+                                <h6>Form Data</h6>
+                                <ul>
+                                    <li><code>file</code>: The file to validate</li>
+                                    <li><code>detect_phi</code>: Enable PHI detection (true/false)</li>
+                                    <li><code>quality_checks</code>: Enable quality checks (true/false)</li>
+                                    <li><code>profile</code>: Validation profile</li>
+                                    <li><code>standards</code>: Array of standards to check</li>
+                                </ul>
+
+                                <h6>Supported Formats</h6>
+                                <ul>
+                                    <li>CSV (.csv)</li>
+                                    <li>Excel (.xlsx, .xls)</li>
+                                    <li>JSON (.json)</li>
+                                    <li>Parquet (.parquet)</li>
+                                </ul>
+
+                                <h6>File Size Limit</h6>
+                                <p>16MB maximum file size</p>
+
+                                <h6>Example</h6>
+                                <div class="code-example">
+                                    <small class="text-muted">cURL</small><br>
+                                    <code>curl -X POST "http://localhost:8000/api/validate/file" \<br>
+&nbsp;&nbsp;-F "file=@medical_data.csv" \<br>
+&nbsp;&nbsp;-F "detect_phi=true" \<br>
+&nbsp;&nbsp;-F "quality_checks=true"</code>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Compliance Check -->
+                    <section id="compliance">
+                        <h2>Compliance Check</h2>
+                        <div class="card endpoint-card post">
+                            <div class="card-header">
+                                <span class="badge bg-primary method-badge">POST</span>
+                                <code>/api/compliance/check</code>
+                            </div>
+                            <div class="card-body">
+                                <p>Quick compliance assessment for medical standards.</p>
+                                
+                                <h6>Request Body</h6>
+                                <pre><code class="language-json">{
+  "patient_id": ["001", "002"],
+  "diagnosis": ["E11.9", "I10"],
+  "procedure": ["99213", "93010"]
+}</code></pre>
+
+                                <h6>Response</h6>
+                                <pre><code class="language-json">{
+  "hipaa_compliant": true,
+  "icd10_compliant": true,
+  "loinc_compliant": false,
+  "cpt_compliant": true,
+  "fhir_compliant": true,
+  "omop_compliant": true,
+  "details": {
+    "hipaa": {
+      "compliant": true,
+      "issues": [],
+      "score": 100
+    }
+  }
+}</code></pre>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Profiles -->
+                    <section id="profiles">
+                        <h2>Profiles</h2>
+                        <div class="card endpoint-card get">
+                            <div class="card-header">
+                                <span class="badge bg-success method-badge">GET</span>
+                                <code>/api/profiles</code>
+                            </div>
+                            <div class="card-body">
+                                <p>Retrieve available validation profiles.</p>
+                                
+                                <h6>Response</h6>
+                                <pre><code class="language-json">{
+  "clinical_trials": "Clinical trial data validation",
+  "ehr": "Electronic health records validation",
+  "imaging": "Medical imaging metadata validation",
+  "lab": "Laboratory data validation"
+}</code></pre>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Standards -->
+                    <section id="standards">
+                        <h2>Standards</h2>
+                        <div class="card endpoint-card get">
+                            <div class="card-header">
+                                <span class="badge bg-success method-badge">GET</span>
+                                <code>/api/standards</code>
+                            </div>
+                            <div class="card-body">
+                                <p>Get detailed information about supported medical standards.</p>
+                                
+                                <h6>Response</h6>
+                                <pre><code class="language-json">{
+  "icd10": {
+    "name": "International Classification of Diseases, 10th Revision",
+    "version": "2024",
+    "authority": "WHO",
+    "description": "Standard classification system for diseases and health conditions"
+  },
+  "loinc": {
+    "name": "Logical Observation Identifiers Names and Codes",
+    "version": "2.76",
+    "authority": "Regenstrief Institute",
+    "description": "Standard for identifying medical laboratory observations"
+  }
+}</code></pre>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Error Handling -->
+                    <section id="errors">
+                        <h2>Error Handling</h2>
+                        <p>All endpoints return consistent error responses.</p>
+                        
+                        <h6>Standard Error Response</h6>
+                        <pre><code class="language-json">{
+  "success": false,
+  "error": "Error description",
+  "error_type": "ErrorType",
+  "traceback": "Full error traceback (in debug mode)"
+}</code></pre>
+
+                        <h6>HTTP Status Codes</h6>
+                        <ul>
+                            <li><strong>200:</strong> Success</li>
+                            <li><strong>400:</strong> Bad Request (invalid data, file type not allowed)</li>
+                            <li><strong>413:</strong> Payload Too Large (file too big)</li>
+                            <li><strong>500:</strong> Internal Server Error</li>
+                        </ul>
+                    </section>
+
+                    <!-- Rate Limiting -->
+                    <section id="rate-limiting">
+                        <h2>Rate Limiting</h2>
+                        <ul>
+                            <li><strong>Default:</strong> 100 requests per minute per IP</li>
+                            <li><strong>File uploads:</strong> 10 requests per minute per IP</li>
+                            <li><strong>Burst:</strong> Up to 20 requests in 10 seconds</li>
+                        </ul>
+                        
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            Rate limits are applied per IP address. For higher limits, contact support.
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-dark text-light py-4 mt-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Medical Data Validator</h6>
+                    <p class="mb-0">Enterprise-grade validation for healthcare datasets</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <p class="mb-0">
+                        <a href="https://github.com/RanaEhtashamAli/medical-data-validator" class="text-light">
+                            <i class="fab fa-github"></i> GitHub
+                        </a>
+                        |
+                        <a href="mailto:ranaehtashamali1@gmail.com" class="text-light">
+                            <i class="fas fa-envelope"></i> Contact
+                        </a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script>
+        // Smooth scrolling for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // Update active nav link based on scroll position
+        window.addEventListener('scroll', () => {
+            const sections = document.querySelectorAll('section[id]');
+            const navLinks = document.querySelectorAll('.nav-link');
+            
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                if (pageYOffset >= sectionTop - 60) {
+                    current = section.getAttribute('id');
+                }
+            });
+
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === `#${current}`) {
+                    link.classList.add('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html> 
