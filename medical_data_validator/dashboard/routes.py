@@ -622,7 +622,7 @@ def register_routes(app):
     app.register_blueprint(api_bp)
     
     # UI Routes
-    @app.route('/')
+    @app.route('/home')
     def index():
         return render_template('index.html')
 
