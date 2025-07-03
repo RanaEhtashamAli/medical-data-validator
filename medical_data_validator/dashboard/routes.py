@@ -649,10 +649,17 @@ def create_validator(detect_phi: bool, quality_checks: bool, profile: str) -> Me
     
     # Create basic validator
     validator = MedicalDataValidator()
+    
+    # Always add basic quality checks to ensure we have some validation
+    validator.add_rule(DataQualityChecker())
+    
+    # Add optional rules based on user selection
     if detect_phi:
         validator.add_rule(PHIDetector())
-    if quality_checks:
-        validator.add_rule(DataQualityChecker())
+    
+    # Note: quality_checks is now always True since we add DataQualityChecker above
+    # This ensures we always have some validation happening
+    
     return validator
 
 def register_routes(app):
@@ -738,6 +745,9 @@ def register_routes(app):
             validator = create_validator(detect_phi, quality_checks, profile)
             result = validator.validate(data)
             charts = generate_charts(data, result)
+            # Generate compliance report
+            standards = ['hipaa', 'icd10', 'loinc', 'cpt', 'fhir', 'omop']
+            compliance_report = generate_compliance_report(data, result, standards)
             os.unlink(tmp_path)
             # Convert result to dict and handle numpy types
             result_dict = convert_numpy_types(result.to_dict())
@@ -747,6 +757,7 @@ def register_routes(app):
                 'success': True,
                 'result': result_dict,
                 'charts': charts_dict,
+                'compliance_report': compliance_report,
                 'summary': {
                     'total_rows': len(data),
                     'total_columns': len(data.columns),

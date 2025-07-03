@@ -41,6 +41,63 @@
             padding: 20px;
             margin: 10px 0;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+            position: relative;
+        }
+        
+        /* Chart-specific styling */
+        #severityChart,
+        #columnChart,
+        #missingChart,
+        #dtypeChart {
+            width: 100% !important;
+            height: 400px !important;
+            max-width: 100%;
+            overflow: hidden;
+        }
+        
+        /* Responsive chart containers */
+        .chart-container > div {
+            width: 100% !important;
+            height: 100% !important;
+            max-width: 100%;
+            overflow: hidden;
+        }
+        
+        /* Ensure Plotly charts respect container boundaries */
+        .js-plotly-plot {
+            width: 100% !important;
+            height: 100% !important;
+            max-width: 100%;
+            overflow: hidden;
+        }
+        
+        /* Chart title styling */
+        .chart-container h6 {
+            margin-bottom: 15px;
+            color: #495057;
+            font-weight: 600;
+        }
+        
+        /* Mobile responsiveness for charts */
+        @media (max-width: 768px) {
+            .chart-container {
+                padding: 15px;
+                margin: 5px 0;
+            }
+            
+            #severityChart,
+            #columnChart,
+            #missingChart,
+            #dtypeChart {
+                height: 300px !important;
+            }
+        }
+        
+        /* Ensure no horizontal scroll on chart containers */
+        .chart-container,
+        .chart-container * {
+            box-sizing: border-box;
         }
         .loading {
             display: none;
@@ -201,6 +258,18 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Compliance Summary Table -->
+                    <div class="card mt-4">
+                        <div class="card-header">
+                            <h5><i class="fas fa-balance-scale"></i> Compliance Summary</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="complianceSummaryTable">
+                                <!-- Compliance summary will be inserted here -->
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -322,30 +391,77 @@
         });
 
         function displayResults(data) {
-            const { summary, charts, result } = data;
+            const { summary, charts, result, compliance_report } = data;
             
             // Display summary cards
             displaySummaryCards(summary);
             
+            // Common Plotly config for responsive charts
+            const plotlyConfig = {
+                responsive: true,
+                displayModeBar: true,
+                displaylogo: false,
+                modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d'],
+                toImageButtonOptions: {
+                    format: 'png',
+                    filename: 'medical_data_validation_chart',
+                    height: 400,
+                    width: 600,
+                    scale: 2
+                }
+            };
+            
             // Display charts
+            if (charts.missing_values_html) {
+                // Render backend-generated HTML for missing values chart
+                document.getElementById('missingChart').innerHTML = `<div class="chart-container">${charts.missing_values_html}</div>`;
+            } else if (charts.missing_values) {
+                // Fallback: render with Plotly.js if only data/layout is present
+                const layout = {
+                    ...charts.missing_values.layout,
+                    autosize: true,
+                    margin: { l: 50, r: 20, t: 50, b: 50 }
+                };
+                Plotly.newPlot('missingChart', charts.missing_values.data, layout, plotlyConfig);
+            }
             if (charts.severity_distribution) {
-                Plotly.newPlot('severityChart', charts.severity_distribution.data, charts.severity_distribution.layout);
+                const layout = {
+                    ...charts.severity_distribution.layout,
+                    autosize: true,
+                    margin: { l: 20, r: 20, t: 50, b: 20 }
+                };
+                Plotly.newPlot('severityChart', charts.severity_distribution.data, layout, plotlyConfig);
             }
             if (charts.column_issues) {
-                Plotly.newPlot('columnChart', charts.column_issues.data, charts.column_issues.layout);
-            }
-            if (charts.missing_values) {
-                Plotly.newPlot('missingChart', charts.missing_values.data, charts.missing_values.layout);
+                const layout = {
+                    ...charts.column_issues.layout,
+                    autosize: true,
+                    margin: { l: 50, r: 20, t: 50, b: 80 }
+                };
+                Plotly.newPlot('columnChart', charts.column_issues.data, layout, plotlyConfig);
             }
             if (charts.data_types) {
-                Plotly.newPlot('dtypeChart', charts.data_types.data, charts.data_types.layout);
+                const layout = {
+                    ...charts.data_types.layout,
+                    autosize: true,
+                    margin: { l: 20, r: 20, t: 50, b: 20 }
+                };
+                Plotly.newPlot('dtypeChart', charts.data_types.data, layout, plotlyConfig);
             }
             
             // Display detailed issues
             displayIssues(result.issues);
             
+            // Display compliance summary
+            displayComplianceSummary(compliance_report);
+            
             // Show results section
             resultsSection.style.display = 'block';
+            
+            // Trigger window resize to ensure charts are properly sized
+            setTimeout(() => {
+                window.dispatchEvent(new Event('resize'));
+            }, 100);
         }
 
         function displaySummaryCards(summary) {
@@ -428,6 +544,37 @@
             }).join('');
 
             issuesList.innerHTML = issuesHtml;
+        }
+
+        function displayComplianceSummary(report) {
+            const tableDiv = document.getElementById('complianceSummaryTable');
+            if (!report || Object.keys(report).length === 0) {
+                tableDiv.innerHTML = '<div class="alert alert-info">No compliance report available.</div>';
+                return;
+            }
+            let html = `<table class="table table-bordered table-striped">
+                <thead>
+                    <tr>
+                        <th>Standard</th>
+                        <th>Status</th>
+                        <th>Score</th>
+                        <th>Issues</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+            for (const [standard, info] of Object.entries(report)) {
+                const status = info.compliant ? '<span class="badge bg-success">Compliant</span>' : '<span class="badge bg-danger">Non-compliant</span>';
+                const score = info.score !== undefined ? info.score : '';
+                const issues = info.issues && info.issues.length > 0 ? `<ul>${info.issues.map(i => `<li>${i}</li>`).join('')}</ul>` : '<span class="text-success">None</span>';
+                html += `<tr>
+                    <td>${standard.toUpperCase()}</td>
+                    <td>${status}</td>
+                    <td>${score}</td>
+                    <td>${issues}</td>
+                </tr>`;
+            }
+            html += '</tbody></table>';
+            tableDiv.innerHTML = html;
         }
     </script>
 </body>
