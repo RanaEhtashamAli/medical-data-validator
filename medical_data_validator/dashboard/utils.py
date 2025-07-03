@@ -55,13 +55,32 @@ def generate_charts(data: pd.DataFrame, result: ValidationResult) -> Dict[str, A
         'Warning': len([i for i in result.issues if i.severity == 'warning']),
         'Info': len([i for i in result.issues if i.severity == 'info'])
     }
-    fig_severity = px.pie(
-        values=list(severity_counts.values()),
-        names=list(severity_counts.keys()),
-        title='Validation Issues by Severity',
-        color_discrete_map={'Error': '#d62728', 'Warning': '#ff7f0e', 'Info': '#1f77b4'}
-    )
-    charts['severity_distribution'] = fig_severity.to_dict()
+    
+    # Only include categories that have actual issues
+    non_zero_severities = {k: v for k, v in severity_counts.items() if v > 0}
+    
+    if non_zero_severities:
+        fig_severity = px.pie(
+            values=list(non_zero_severities.values()),
+            names=list(non_zero_severities.keys()),
+            title='Validation Issues by Severity',
+            color_discrete_map={'Error': '#d62728', 'Warning': '#ff7f0e', 'Info': '#1f77b4'}
+        )
+        charts['severity_distribution'] = fig_severity.to_dict()
+    else:
+        # No issues found - create a simple message chart
+        charts['severity_distribution'] = {
+            'data': [{
+                'type': 'pie',
+                'values': [1],
+                'labels': ['No Issues Found'],
+                'marker': {'colors': ['#28a745']}
+            }],
+            'layout': {
+                'title': 'Validation Issues by Severity',
+                'showlegend': False
+            }
+        }
     column_issues = {}
     for issue in result.issues:
         if issue.column:

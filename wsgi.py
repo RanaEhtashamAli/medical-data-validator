@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-WSGI entry point for Medical Data Validator Dashboard.
-Use this file for production deployment with Gunicorn or uWSGI.
+WSGI entry point for the Medical Data Validator Dashboard.
+This file is used by Gunicorn to serve the Flask application.
 """
 
-import os
 import sys
+import os
 
-# Add the project root to the Python path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add the project root to Python path
+project_root = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, project_root)
 
 from medical_data_validator.dashboard.app import create_dashboard_app
 
@@ -16,5 +17,4 @@ from medical_data_validator.dashboard.app import create_dashboard_app
 app = create_dashboard_app()
 
 if __name__ == "__main__":
-    # For development
-    app.run(host='0.0.0.0', port=5000, debug=False) 
+    app.run() 
