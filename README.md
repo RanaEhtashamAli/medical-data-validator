@@ -466,32 +466,187 @@ date_rule = DateValidator(
 
 ### Custom Validation Rules
 
+The Medical Data Validator provides a powerful extension framework for creating custom validation rules:
+
+#### 1. CustomValidator Class
 ```python
-from medical_data_validator import ValidationRule, ValidationIssue
+from medical_data_validator.extensions import CustomValidator
+from medical_data_validator import ValidationIssue
+import pandas as pd
 
-class CustomRule(ValidationRule):
-    def validate(self, data):
-        issues = []
-        # Your custom validation logic
-        if "custom_column" in data.columns:
-            # Check something specific
-            pass
-        return issues
-
-# Use custom rule
-validator = MedicalDataValidator([CustomRule()])
-```
-
-### Custom Validators
-
-```python
-def custom_validator(df):
+# Create a custom validation function
+def validate_age_range(data: pd.DataFrame) -> List[ValidationIssue]:
     issues = []
-    # Your validation logic
+    
+    if 'age' in data.columns:
+        # Check for negative ages
+        negative_ages = data[data['age'] < 0]
+        for idx in negative_ages.index:
+            issues.append(ValidationIssue(
+                severity='error',
+                message='Age cannot be negative',
+                row=idx,
+                column='age',
+                value=negative_ages.loc[idx, 'age']
+            ))
+        
+        # Check for unrealistic ages
+        unrealistic_ages = data[data['age'] > 120]
+        for idx in unrealistic_ages.index:
+            issues.append(ValidationIssue(
+                severity='warning',
+                message='Age seems unrealistic (over 120)',
+                row=idx,
+                column='age',
+                value=unrealistic_ages.loc[idx, 'age']
+            ))
+    
     return issues
 
+# Create custom validator
+age_validator = CustomValidator(
+    validator_func=validate_age_range,
+    name="AgeRangeValidator",
+    description="Validates age values are within reasonable ranges",
+    severity="error"
+)
+
+# Use it in your validator
+from medical_data_validator import MedicalDataValidator
 validator = MedicalDataValidator()
-validator.add_validator("my_custom_check", custom_validator)
+validator.add_rule(age_validator)
+```
+
+#### 2. Convenience Function
+```python
+from medical_data_validator.extensions import create_custom_validator
+
+# Create custom validator using the convenience function
+bmi_validator = create_custom_validator(
+    func=lambda data: [
+        ValidationIssue(
+            severity='error',
+            message='BMI out of range',
+            row=idx,
+            column='bmi',
+            value=row['bmi']
+        )
+        for idx, row in data.iterrows()
+        if 'bmi' in data.columns and (row['bmi'] < 10 or row['bmi'] > 60)
+    ],
+    name="BMIRangeValidator",
+    description="Validates BMI values are within medical ranges"
+)
+```
+
+#### 3. Validation Profiles
+Pre-configured validation profiles for different medical domains:
+
+```python
+from medical_data_validator.extensions import get_profile, list_available_profiles
+
+# See available profiles
+print(list_available_profiles())
+# Output: ['clinical_trials', 'electronic_health_records', 'medical_imaging', 'laboratory_data']
+
+# Use a pre-configured profile
+clinical_trials_profile = get_profile('clinical_trials')
+validator = clinical_trials_profile.create_validator()
+
+# Or use the MedicalProfiles class directly
+from medical_data_validator.extensions import MedicalProfiles
+
+ehr_profile = MedicalProfiles.electronic_health_records()
+validator = ehr_profile.create_validator()
+```
+
+#### 4. Custom Validation Profiles
+```python
+from medical_data_validator.extensions import ValidationProfile, CustomValidator
+
+# Create a comprehensive custom profile
+class OncologyProfile(ValidationProfile):
+    def __init__(self):
+        from medical_data_validator.validators import (
+            SchemaValidator, PHIDetector, DataQualityChecker, 
+            MedicalCodeValidator, RangeValidator, DateValidator
+        )
+        
+        rules = [
+            SchemaValidator(
+                required_columns=["patient_id", "diagnosis_date", "cancer_type", "stage"],
+                column_types={"patient_id": "string", "diagnosis_date": "datetime"}
+            ),
+            PHIDetector(),
+            DataQualityChecker(),
+            MedicalCodeValidator(code_columns={
+                "diagnosis_code": "icd10",
+                "procedure_code": "cpt"
+            }),
+            DateValidator(
+                date_columns=["diagnosis_date", "treatment_start_date"],
+                min_date="2000-01-01"
+            ),
+            RangeValidator(ranges={
+                "age": {"min": 0, "max": 120},
+                "tumor_size": {"min": 0, "max": 50},
+            }),
+            CustomValidator(
+                validator_func=self._validate_cancer_staging,
+                name="CancerStagingValidator",
+                description="Validates cancer staging information"
+            )
+        ]
+        
+        super().__init__(
+            name="Oncology",
+            description="Comprehensive validation for oncology datasets",
+            rules=rules,
+            metadata={
+                "domain": "oncology",
+                "compliance": ["HIPAA", "FDA"],
+                "data_types": ["demographics", "diagnoses", "treatments", "outcomes"]
+            }
+        )
+    
+    def _validate_cancer_staging(self, data: pd.DataFrame) -> List[ValidationIssue]:
+        issues = []
+        valid_stages = ['0', 'I', 'II', 'III', 'IV', 'Unknown']
+        
+        if 'stage' in data.columns:
+            invalid_stages = data[~data['stage'].isin(valid_stages)]
+            for idx in invalid_stages.index:
+                issues.append(ValidationIssue(
+                    severity='error',
+                    message=f'Invalid cancer stage: {invalid_stages.loc[idx, "stage"]}',
+                    row=idx,
+                    column='stage',
+                    value=invalid_stages.loc[idx, 'stage']
+                ))
+        
+        return issues
+
+# Use the custom profile
+oncology_profile = OncologyProfile()
+validator = oncology_profile.create_validator()
+```
+
+#### 5. Validation Registry
+```python
+from medical_data_validator.extensions import ValidationRegistry
+
+# Create registry
+registry = ValidationRegistry()
+
+# Register custom validator
+registry.register_validator("my_age_validator", age_validator)
+
+# Register custom profile
+registry.register_profile("oncology_profile", oncology_profile)
+
+# Use registered validators/profiles
+validator = registry.get_validator("my_age_validator")
+profile_validator = registry.create_validator_from_profile("oncology_profile")
 ```
 
 ### Working with Results
