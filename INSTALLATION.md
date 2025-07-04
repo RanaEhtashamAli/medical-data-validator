@@ -1,277 +1,532 @@
-# Installation Guide
+# Medical Data Validator Installation Guide
 
-## 🚀 **Installation Options**
+## Overview
 
-The Medical Data Validator supports modular installation, allowing you to install only the components you need.
+This guide provides step-by-step instructions for installing and setting up the Medical Data Validator v1.2 with all advanced features including compliance validation, analytics, and monitoring.
 
-## 📦 **Core Installation**
+## 🚀 Quick Start
 
-Install only the core validation library (no CLI, web UI, or API):
+### Live Demo
+**Try the Medical Data Validator online**: [https://medical-data-validator-production.up.railway.app/home](https://medical-data-validator-production.up.railway.app/home)
+
+### Prerequisites
+
+- **Python**: 3.8 or higher
+- **pip**: Latest version
+- **Git**: For cloning the repository
+- **Docker**: (Optional) For containerized deployment
+
+### System Requirements
+
+- **RAM**: Minimum 2GB, Recommended 4GB+
+- **Storage**: 1GB free space
+- **Network**: Internet connection for package installation
+
+## 📦 Installation Methods
+
+### Method 1: Direct Installation (Recommended)
 
 ```bash
+# Clone the repository
+git clone https://github.com/RanaEhtashamAli/medical-data-validator.git
+cd medical-data-validator
+
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# On Windows:
+venv\Scripts\activate
+# On macOS/Linux:
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Install the package in development mode
+pip install -e .
+```
+
+### Method 2: Docker Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/RanaEhtashamAli/medical-data-validator.git
+cd medical-data-validator
+
+# Build and run with Docker Compose
+docker-compose up -d
+
+# Access the application
+# - Dashboard: https://medical-data-validator-production.up.railway.app/home
+# - API: https://medical-data-validator-production.up.railway.app/api
+```
+
+### Method 3: pip Installation
+
+```bash
+# Install from PyPI (when available)
 pip install medical-data-validator
+
+# Or install from GitHub
+pip install git+https://github.com/RanaEhtashamAli/medical-data-validator.git
 ```
 
-**What's included:**
-- Core validation engine
-- Medical code validators (ICD-10, LOINC, CPT)
-- PHI/PII detection
-- Data quality checks
-- Python API access
+## ⚙️ Configuration
 
-## 🖥️ **CLI Installation**
+### Environment Variables
 
-Add command-line interface capabilities:
+Create a `.env` file in the project root:
 
 ```bash
-pip install medical-data-validator[cli]
+# Application Settings
+FLASK_ENV=development
+SECRET_KEY=your-secret-key-here
+DEBUG=true
+
+# v1.2 Features
+ENABLE_COMPLIANCE=true
+ENABLE_ANALYTICS=true
+ENABLE_MONITORING=true
+COMPLIANCE_TEMPLATE=clinical_trials
+
+# Security
+ALLOWED_ORIGINS=https://medical-data-validator-production.up.railway.app
+CORS_ORIGINS=https://medical-data-validator-production.up.railway.app
+
+# Performance
+MAX_FILE_SIZE=16777216  # 16MB
+WORKER_PROCESSES=4
+TIMEOUT=300
+
+# Optional: Database (if using external database)
+DATABASE_URL=sqlite:///medical_validator.db
+
+# Optional: Monitoring
+ENABLE_ALERTS=true
+ALERT_EMAIL=admin@yourdomain.com
 ```
 
-**What's added:**
-- Command-line interface
-- Rich terminal output
-- Tabular results display
-- Interactive validation commands
+### Configuration Files
 
-## 🌐 **Web Dashboard Installation**
+#### Compliance Templates
+Create custom compliance templates in `compliance_templates/`:
 
-Add web dashboard interface:
+```json
+{
+  "custom_template": {
+    "name": "Custom Healthcare Template",
+    "description": "Custom validation template for healthcare data",
+    "standards": ["hipaa", "gdpr", "icd10"],
+    "rules": [
+      {
+        "name": "phi_detection",
+        "pattern": "\\b\\d{3}-\\d{2}-\\d{4}\\b",
+        "severity": "high",
+        "description": "SSN pattern detected"
+      }
+    ]
+  }
+}
+```
+
+#### Custom Rules
+Add custom validation rules in `custom_rules.json`:
+
+```json
+{
+  "custom_rules": [
+    {
+      "name": "age_validation",
+      "pattern": "^(?:1[0-9]|[2-9][0-9]|1[0-1][0-9]|120)$",
+      "severity": "warning",
+      "description": "Age must be between 10 and 120",
+      "field_pattern": ".*age.*"
+    }
+  ]
+}
+```
+
+## 🚀 Running the Application
+
+### Web Interface
 
 ```bash
-pip install medical-data-validator[web]
+# Start the web application
+python launch_medical_validator_web_ui.py
+
+# Or use the dashboard launcher
+python launch_dashboard.py
 ```
 
-**What's added:**
-- Flask-based web dashboard
-- Interactive file upload
-- Visual charts and reports
-- Real-time validation results
+**Access the dashboard**: https://medical-data-validator-production.up.railway.app/home
 
-## 🔌 **REST API Installation**
-
-Add REST API capabilities:
+### API Server
 
 ```bash
-pip install medical-data-validator[api]
+# Start the API server
+python launch_api.py
+
+# Or use the Flask development server
+python -m flask run --host=0.0.0.0 --port=8000
 ```
 
-**What's added:**
-- Flask-based REST API
-- File upload endpoints
-- JSON data validation
-- Interactive API documentation
-- Health check endpoints
+**API endpoints available at**: https://medical-data-validator-production.up.railway.app/api/v1.2/
 
-## 🌐 **All Web Interfaces**
-
-Install both web dashboard and REST API:
+### Command Line Interface
 
 ```bash
-pip install medical-data-validator[web-all]
+# Basic validation
+python medical_data_validator_cli.py validate data.csv
+
+# With compliance checking
+python medical_data_validator_cli.py validate data.csv --compliance hipaa,gdpr
+
+# With custom template
+python medical_data_validator_cli.py validate data.csv --template clinical_trials
+
+# Get help
+python medical_data_validator_cli.py --help
 ```
 
-**What's added:**
-- Web dashboard (Flask)
-- REST API (Flask)
-- All web-related dependencies
+## 🧪 Testing the Installation
 
-## 🎯 **Complete Installation**
-
-Install everything (core + CLI + web + API):
+### Health Check
 
 ```bash
-pip install medical-data-validator[all]
+# Check API health
+curl https://medical-data-validator-production.up.railway.app/api/health
+
+# Check dashboard health
+curl https://medical-data-validator-production.up.railway.app/health
 ```
 
-**What's included:**
-- Core validation engine
-- Command-line interface
-- Web dashboard
-- REST API
-- All dependencies
+### Validation Test
 
-## 🛠️ **Development Installation**
-
-For developers and contributors:
-
-```bash
-pip install medical-data-validator[dev]
-```
-
-**What's added:**
-- Testing framework (pytest)
-- Code formatting (black, isort)
-- Linting (flake8, mypy)
-- Security scanning (bandit, safety)
-- Pre-commit hooks
-
-## 📚 **Documentation Installation**
-
-For building documentation:
-
-```bash
-pip install medical-data-validator[docs]
-```
-
-**What's added:**
-- Sphinx documentation builder
-- ReadTheDocs theme
-- API documentation generation
-
-## 🧪 **Testing Installation**
-
-For running tests:
-
-```bash
-pip install medical-data-validator[test]
-```
-
-**What's added:**
-- pytest testing framework
-- Coverage reporting
-- Benchmarking tools
-
-## 🔄 **Combination Examples**
-
-Install multiple components:
-
-```bash
-# Core + CLI + Web Dashboard
-pip install medical-data-validator[cli,web]
-
-# Core + API + Development tools
-pip install medical-data-validator[api,dev]
-
-# Everything except documentation
-pip install medical-data-validator[all,docs]
-
-# Core + CLI + Testing
-pip install medical-data-validator[cli,test]
-```
-
-## 📋 **Dependency Summary**
-
-| Component | Dependencies | Size |
-|-----------|-------------|------|
-| **Core** | pandas, pydantic, numpy, openpyxl | ~50MB |
-| **CLI** | click, rich, tabulate | +15MB |
-| **Web** | flask, plotly, dash, gunicorn | +80MB |
-| **API** | flask, python-multipart | +15MB |
-| **All** | Complete stack | ~200MB |
-
-## 🚀 **Quick Start Examples**
-
-### Core Only (Python API)
 ```python
 from medical_data_validator import MedicalDataValidator
 import pandas as pd
 
-# Load data
-data = pd.read_csv('medical_data.csv')
+# Create test data
+test_data = pd.DataFrame({
+    'patient_id': ['001', '002', '003'],
+    'age': [30, 45, 28],
+    'diagnosis': ['E11.9', 'I10', 'Z51.11'],
+    'ssn': ['123-45-6789', '987-65-4321', '555-12-3456']
+})
 
-# Validate
-validator = MedicalDataValidator()
-result = validator.validate(data)
+# Create validator with v1.2 features
+validator = MedicalDataValidator(
+    enable_compliance=True,
+    compliance_template='clinical_trials'
+)
+
+# Validate data
+result = validator.validate(test_data)
+
+# Check results
 print(f"Valid: {result.is_valid}")
+print(f"Total issues: {len(result.issues)}")
+
+# Access v1.2 compliance report
+if 'compliance_report' in result.summary:
+    compliance = result.summary['compliance_report']
+    print(f"Overall Score: {compliance['overall_score']:.1f}%")
+    print(f"Risk Level: {compliance['risk_level']}")
 ```
 
-### CLI Usage
+### API Test
+
+```python
+import requests
+
+# Test API endpoint
+data = {
+    'patient_id': ['001', '002'],
+    'diagnosis': ['E11.9', 'I10']
+}
+
+response = requests.post(
+    'https://medical-data-validator-production.up.railway.app/api/v1.2/validate/data',
+    json=data
+)
+
+result = response.json()
+print(f"API test successful: {result['success']}")
+```
+
+## 🔧 Development Setup
+
+### Development Dependencies
+
 ```bash
-# Install CLI
-pip install medical-data-validator[cli]
+# Install development dependencies
+pip install -r requirements-dev.txt
 
-# Use CLI
-medical-validator validate data.csv --detect-phi
+# Install pre-commit hooks
+pre-commit install
 ```
 
-### Web Dashboard
+### Running Tests
+
 ```bash
-# Install web dashboard
-pip install medical-data-validator[web]
+# Run all tests
+python -m pytest tests/
 
-# Launch dashboard
-medical-validator dashboard
-# Open http://localhost:5000
+# Run specific test categories
+python -m pytest tests/test_v1_2_compliance.py
+python -m pytest tests/test_v1_2_api_integration.py
+
+# Run with coverage
+python -m pytest --cov=medical_data_validator tests/
+
+# Run performance tests
+python -m pytest benchmarks/
 ```
 
-### REST API
+### Code Quality
+
 ```bash
-# Install API
-pip install medical-data-validator[api]
+# Run linting
+flake8 medical_data_validator/
+black medical_data_validator/
+isort medical_data_validator/
 
-# Launch API server
-medical-validator api
-# Open http://localhost:8000/docs
+# Run type checking
+mypy medical_data_validator/
+
+# Run security checks
+bandit -r medical_data_validator/
 ```
 
-## 🔧 **Environment-Specific Installation**
+## 🐳 Docker Development
 
-### Production Deployment
+### Development Container
+
 ```bash
-# Minimal production install
-pip install medical-data-validator[api]
+# Build development image
+docker build -f Dockerfile.dev -t medical-validator-dev .
 
-# With web dashboard
-pip install medical-data-validator[web-all]
+# Run development container
+docker run -it --rm \
+  -p 8000:8000 \
+  -p 5000:5000 \
+  -v $(pwd):/app \
+  medical-validator-dev
+
+# Access development environment
+# - API: https://medical-data-validator-production.up.railway.app/api
+# - Dashboard: https://medical-data-validator-production.up.railway.app/home
 ```
 
-### Development Environment
-```bash
-# Full development setup
-pip install medical-data-validator[all,dev,test,docs]
-```
+### Multi-stage Build
 
-### Docker Deployment
 ```dockerfile
-# Install only what you need
-RUN pip install medical-data-validator[api]
+# Development stage
+FROM python:3.9-slim as dev
+WORKDIR /app
+COPY requirements-dev.txt .
+RUN pip install -r requirements-dev.txt
+COPY . .
+CMD ["python", "launch_medical_validator_web_ui.py"]
 
-# Or install everything
-RUN pip install medical-data-validator[all]
+# Production stage
+FROM python:3.9-slim as prod
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+CMD ["python", "launch_api.py"]
 ```
 
-## ⚠️ **Troubleshooting**
+## 🔒 Security Configuration
 
-### Missing Dependencies
-If you get import errors, install the required components:
+### SSL/TLS Setup
 
 ```bash
-# For web dashboard errors
-pip install medical-data-validator[web]
+# Generate SSL certificate (for development)
+openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes
 
-# For API errors
-pip install medical-data-validator[api]
-
-# For CLI errors
-pip install medical-data-validator[cli]
+# Configure Flask with SSL
+export FLASK_SSL_CERT=cert.pem
+export FLASK_SSL_KEY=key.pem
 ```
 
-### Version Conflicts
-If you encounter dependency conflicts:
+### Authentication Setup
+
+```python
+# Configure JWT authentication
+JWT_SECRET_KEY = 'your-jwt-secret-key'
+JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
+JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
+```
+
+### CORS Configuration
+
+```python
+# Configure CORS for production
+CORS_ORIGINS = [
+    'https://medical-data-validator-production.up.railway.app',
+    'https://yourdomain.com'
+]
+
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_HEADERS = ['Content-Type', 'Authorization']
+```
+
+## 📊 Monitoring Setup
+
+### Health Monitoring
 
 ```bash
-# Create a fresh virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Check system health
+curl https://medical-data-validator-production.up.railway.app/api/health
 
-# Install with specific version
-pip install medical-data-validator[all]==0.1.0
+# Check specific service health
+curl https://medical-data-validator-production.up.railway.app/api/v1.2/health
 ```
 
-### System Requirements
-- **Python**: 3.8 or higher
-- **Memory**: 512MB minimum (2GB recommended for web interfaces)
-- **Disk**: 200MB for complete installation
-- **Network**: Required for downloading dependencies
+### Performance Monitoring
 
-## 📞 **Support**
+```python
+# Enable performance monitoring
+from medical_data_validator.monitoring import monitor
 
-For installation issues:
-- Check the [troubleshooting section](#-troubleshooting)
-- Review [dependency requirements](#-dependency-summary)
-- Open an issue on GitHub with your error details
+# Track validation performance
+@monitor.track_performance
+def validate_data(data):
+    # Validation logic
+    pass
+```
+
+### Alert Configuration
+
+```python
+# Configure alerts
+ALERT_CONFIG = {
+    'compliance_threshold': 80,
+    'response_time_threshold': 5000,  # ms
+    'error_rate_threshold': 0.05,
+    'notification_channels': ['email', 'slack']
+}
+```
+
+## 🚀 Production Deployment
+
+### Environment Variables for Production
+
+```bash
+# Production settings
+FLASK_ENV=production
+SECRET_KEY=your-production-secret-key
+DEBUG=false
+
+# Security
+ALLOWED_ORIGINS=https://medical-data-validator-production.up.railway.app
+CORS_ORIGINS=https://medical-data-validator-production.up.railway.app
+
+# Performance
+WORKER_PROCESSES=8
+MAX_FILE_SIZE=33554432  # 32MB
+TIMEOUT=600
+
+# Monitoring
+ENABLE_ALERTS=true
+ALERT_EMAIL=admin@yourdomain.com
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
+```
+
+### Production Docker
+
+```yaml
+version: '3.8'
+services:
+  medical-validator:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=${SECRET_KEY}
+      - ENABLE_COMPLIANCE=true
+      - ENABLE_ANALYTICS=true
+      - ENABLE_MONITORING=true
+    volumes:
+      - ./compliance_templates:/app/compliance_templates
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "https://medical-data-validator-production.up.railway.app/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+```
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+1. **Import Errors**: Ensure virtual environment is activated
+2. **Port Conflicts**: Check if ports 8000/5000 are available
+3. **Permission Issues**: Check file permissions for compliance templates
+4. **Memory Issues**: Increase system memory for large datasets
+
+### Debug Mode
+
+```bash
+# Enable debug mode
+export FLASK_ENV=development
+export DEBUG=true
+
+# Start with debug logging
+python -u launch_medical_validator_web_ui.py --debug
+```
+
+### Logs
+
+```bash
+# View application logs
+tail -f logs/app.log
+
+# View error logs
+tail -f logs/error.log
+
+# View access logs
+tail -f logs/access.log
+```
+
+### Performance Issues
+
+```bash
+# Monitor system resources
+htop
+iotop
+netstat -tulpn
+
+# Check application performance
+python -m cProfile -o profile.stats launch_api.py
+```
+
+## 📚 Next Steps
+
+### Documentation
+- **[API Documentation](API_DOCUMENTATION.md)** - Complete API reference
+- **[Deployment Guide](DEPLOYMENT_V1.2.md)** - Production deployment
+- **[V1.2 Features](V1.2_FEATURES.md)** - Advanced features overview
+
+### Integration
+- **[cURL Examples](API_CURL_EXAMPLES.md)** - API usage examples
+- **[Python SDK](README.md#python-library)** - Python integration guide
+- **[JavaScript Examples](API_DOCUMENTATION.md#javascript-examples)** - Frontend integration
+
+### Support
+- **Documentation**: https://medical-data-validator-production.up.railway.app/docs
+- **API Docs**: https://medical-data-validator-production.up.railway.app/api/docs
+- **Health Check**: https://medical-data-validator-production.up.railway.app/api/health
+- **Issues**: [GitHub Issues](https://github.com/RanaEhtashamAli/medical-data-validator/issues)
 
 ---
 
-**Last Updated**: July 2025  
-**Package Version**: 0.1.0 
+**Medical Data Validator v1.2 - Installation Complete! 🎉**
+
+*Your healthcare data validation system is ready to use.* 

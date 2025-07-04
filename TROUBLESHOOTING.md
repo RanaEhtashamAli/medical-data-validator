@@ -1,279 +1,471 @@
-# Medical Data Validator - Troubleshooting Guide
+# Medical Data Validator Troubleshooting Guide
 
-## Common Issues and Solutions
+## Overview
 
-### Import Errors
+This guide helps you resolve common issues when using the Medical Data Validator v1.2. If you encounter problems not covered here, please check our [documentation](https://medical-data-validator-production.up.railway.app/docs) or [open an issue](https://github.com/RanaEhtashamAli/medical-data-validator/issues).
 
-#### "attempted relative import with no known parent package"
+## 🚀 Quick Health Check
 
-**Problem**: This error occurs when trying to run Python files directly that use relative imports.
-
-**Solution**: Use the provided launcher scripts instead of running files directly:
-
+### System Status
 ```bash
-# ❌ Don't do this:
-python medical_data_validator/dashboard/app.py
+# Check API health
+curl https://medical-data-validator-production.up.railway.app/api/health
 
-# ✅ Do this instead:
+# Check dashboard health
+curl https://medical-data-validator-production.up.railway.app/health
+
+# Check v1.2 specific health
+curl https://medical-data-validator-production.up.railway.app/api/v1.2/health
+```
+
+### Expected Responses
+```json
+{
+  "status": "healthy",
+  "version": "1.2.0",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "features": ["compliance", "analytics", "monitoring"]
+}
+```
+
+## 🔧 Common Issues
+
+### 1. Installation Problems
+
+#### Python Version Issues
+**Problem**: `SyntaxError` or import errors
+```bash
+# Check Python version
+python --version  # Should be 3.8+
+
+# Update Python if needed
+# Windows: Download from python.org
+# macOS: brew install python@3.9
+# Linux: sudo apt-get install python3.9
+```
+
+#### Dependency Conflicts
+**Problem**: `ImportError` or version conflicts
+```bash
+# Create fresh virtual environment
+python -m venv fresh_venv
+source fresh_venv/bin/activate  # On Windows: fresh_venv\Scripts\activate
+
+# Install with specific versions
+pip install -r requirements.txt --no-cache-dir
+```
+
+#### Missing Dependencies
+**Problem**: `ModuleNotFoundError`
+```bash
+# Install missing packages
+pip install pandas numpy flask plotly
+
+# Or reinstall all dependencies
+pip install -r requirements.txt --force-reinstall
+```
+
+### 2. Web Interface Issues
+
+#### Dashboard Not Loading
+**Problem**: Dashboard shows blank page or errors
+```bash
+# Check if server is running
+ps aux | grep python
+
+# Restart the dashboard
 python launch_dashboard.py
+
+# Check logs
+tail -f logs/app.log
+```
+
+#### File Upload Failures
+**Problem**: Files not uploading or validation errors
+```bash
+# Check file size limits
+ls -lh your_file.csv
+
+# Check file format
+file your_file.csv
+
+# Try smaller test file
+head -100 your_file.csv > test_file.csv
+```
+
+#### Chart Display Issues
+**Problem**: Charts not showing or displaying incorrectly
+```javascript
+// Check browser console for errors
+// Ensure JavaScript is enabled
+// Try refreshing the page
+// Clear browser cache
+```
+
+### 3. API Issues
+
+#### Connection Refused
+**Problem**: `ConnectionError` or `ConnectionRefused`
+```bash
+# Check if API server is running
+curl https://medical-data-validator-production.up.railway.app/api/health
+
+# Check port availability
+netstat -tulpn | grep :8000
+
+# Restart API server
 python launch_api.py
 ```
 
-#### "ModuleNotFoundError: No module named 'medical_data_validator'"
-
-**Problem**: Python can't find the medical_data_validator package.
-
-**Solution**: 
-1. Make sure you're in the project root directory
-2. Install the package in development mode:
-   ```bash
-   pip install -e .
-   ```
-3. Or use the launcher scripts which handle path setup automatically
-
-#### "ImportError: cannot import name 'ValidationResult'"
-
-**Problem**: Core module imports are failing.
-
-**Solution**:
-1. Check that all dependencies are installed:
-   ```bash
-   pip install -r requirements.txt
-   pip install -r requirements-api.txt
-   ```
-2. Verify the package structure is correct
-3. Try reinstalling the package:
-   ```bash
-   pip uninstall medical-data-validator
-   pip install -e .
-   ```
-
-### Flask/Dash Import Issues
-
-#### "ModuleNotFoundError: No module named 'flask'"
-
-**Problem**: Flask is not installed.
-
-**Solution**:
+#### 500 Internal Server Error
+**Problem**: API returns 500 errors
 ```bash
-pip install flask
-pip install dash
-pip install dash-bootstrap-components
+# Check server logs
+tail -f logs/error.log
+
+# Check application logs
+tail -f logs/app.log
+
+# Restart with debug mode
+export FLASK_ENV=development
+export DEBUG=true
+python launch_api.py
 ```
 
-#### "ModuleNotFoundError: No module named 'plotly'"
+#### CORS Errors
+**Problem**: Browser shows CORS errors
+```python
+# Check CORS configuration
+ALLOWED_ORIGINS = [
+    'https://medical-data-validator-production.up.railway.app',
+    'https://yourdomain.com'
+]
 
-**Problem**: Plotly is not installed (optional dependency).
-
-**Solution**:
-```bash
-pip install plotly
+# Update CORS settings in your environment
+export ALLOWED_ORIGINS=https://medical-data-validator-production.up.railway.app
 ```
 
-**Note**: Plotly is optional. The application will work without it, but charts won't be generated.
+### 4. Validation Issues
 
-### File Upload Issues
+#### Data Format Problems
+**Problem**: Validation fails due to data format
+```python
+# Check data format
+import pandas as pd
+data = pd.read_csv('your_file.csv')
+print(data.dtypes)
+print(data.head())
 
-#### "File type not allowed"
+# Common fixes:
+# - Remove BOM from CSV files
+# - Ensure proper encoding (UTF-8)
+# - Check for hidden characters
+```
 
-**Problem**: Uploaded file format is not supported.
+#### Compliance Validation Errors
+**Problem**: Compliance checks failing
+```python
+# Check compliance template
+from medical_data_validator import MedicalDataValidator
 
-**Solution**: 
-- Supported formats: CSV (.csv), Excel (.xlsx, .xls), JSON (.json), Parquet (.parquet)
-- Check file extension and content
-- Ensure file is not corrupted
+validator = MedicalDataValidator(
+    enable_compliance=True,
+    compliance_template='clinical_trials'
+)
 
-#### "File too large"
+# Test with sample data
+test_data = pd.DataFrame({
+    'patient_id': ['001'],
+    'diagnosis': ['E11.9']
+})
 
-**Problem**: File exceeds the 16MB limit.
+result = validator.validate(test_data)
+print(result.summary)
+```
 
-**Solution**:
-- Reduce file size by removing unnecessary columns
-- Split large files into smaller chunks
-- Use data compression if possible
+#### Performance Issues
+**Problem**: Slow validation or timeouts
+```bash
+# Check system resources
+htop
+df -h
+free -h
 
-### API Issues
+# Increase timeout
+export TIMEOUT=600
 
-#### "500 Internal Server Error"
+# Use smaller datasets for testing
+head -1000 large_file.csv > test_file.csv
+```
 
-**Problem**: Server-side error in API processing.
+### 5. Docker Issues
 
-**Solution**:
-1. Check the logs for detailed error messages
-2. Verify input data format
-3. Ensure all required dependencies are installed
-4. Try with smaller datasets first
+#### Container Not Starting
+**Problem**: Docker container fails to start
+```bash
+# Check Docker logs
+docker logs medical-validator
 
-#### "Connection refused"
+# Check container status
+docker ps -a
 
-**Problem**: API server is not running or port is blocked.
+# Rebuild container
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+```
 
-**Solution**:
-1. Start the API server:
-   ```bash
-   python launch_api.py
-   ```
-2. Check if port 8000 is available
-3. Verify firewall settings
+#### Port Conflicts
+**Problem**: Ports already in use
+```bash
+# Check port usage
+netstat -tulpn | grep :8000
+netstat -tulpn | grep :5000
 
-### Performance Issues
+# Kill processes using ports
+sudo kill -9 $(lsof -t -i:8000)
+sudo kill -9 $(lsof -t -i:5000)
 
-#### "Validation is slow"
+# Or use different ports
+docker-compose up -d -p 8001:8000 -p 5001:5000
+```
 
-**Problem**: Large datasets take too long to validate.
+#### Volume Mount Issues
+**Problem**: Compliance templates not loading
+```bash
+# Check volume mounts
+docker inspect medical-validator
 
-**Solution**:
-1. Use smaller datasets for testing
-2. Enable caching if available
-3. Consider using the CLI for batch processing
-4. Check system resources (CPU, memory)
+# Ensure templates directory exists
+ls -la compliance_templates/
 
-#### "Memory error"
+# Fix permissions
+chmod -R 755 compliance_templates/
+```
 
-**Problem**: Not enough memory to process large files.
-
-**Solution**:
-1. Increase system memory
-2. Process files in smaller chunks
-3. Use streaming validation for very large files
-4. Close other applications to free memory
-
-### Security Issues
-
-#### "SSL certificate errors"
-
-**Problem**: HTTPS certificate validation fails.
-
-**Solution**:
-1. For development: Use HTTP or disable SSL verification
-2. For production: Install valid SSL certificates
-3. Update certificate authorities
-
-#### "Permission denied"
-
-**Problem**: File system permissions prevent access.
-
-**Solution**:
-1. Check file and directory permissions
-2. Run with appropriate user privileges
-3. Ensure temporary directories are writable
-
-### Database Issues
-
-#### "Database connection failed"
-
-**Problem**: Cannot connect to database (if using one).
-
-**Solution**:
-1. Check database server status
-2. Verify connection credentials
-3. Ensure database exists and is accessible
-4. Check network connectivity
-
-### Network Issues
-
-#### "CORS errors"
-
-**Problem**: Cross-origin requests are blocked.
-
-**Solution**:
-1. Configure CORS settings in the application
-2. Use same-origin requests when possible
-3. Set appropriate headers for cross-origin requests
-
-#### "Timeout errors"
-
-**Problem**: Requests take too long and timeout.
-
-**Solution**:
-1. Increase timeout settings
-2. Optimize validation performance
-3. Use smaller datasets
-4. Check network connectivity
-
-## Debugging Tips
+## 🔍 Debugging Techniques
 
 ### Enable Debug Mode
-
 ```bash
-# For dashboard
-python launch_dashboard.py --debug
+# Set debug environment variables
+export FLASK_ENV=development
+export DEBUG=true
+export LOG_LEVEL=DEBUG
 
-# For API
-python launch_api.py --debug
+# Start with debug logging
+python -u launch_medical_validator_web_ui.py --debug
 ```
 
 ### Check Logs
-
 ```bash
-# View application logs
-tail -f logs/api.log
-tail -f logs/dashboard.log
+# Application logs
+tail -f logs/app.log
 
-# Check system logs
+# Error logs
+tail -f logs/error.log
+
+# Access logs
+tail -f logs/access.log
+
+# System logs
 journalctl -u medical-validator -f
 ```
 
-### Test Individual Components
-
+### Network Diagnostics
 ```bash
-# Test imports
-python test_imports.py
+# Test API connectivity
+curl -v https://medical-data-validator-production.up.railway.app/api/health
 
-# Test API endpoints
-curl http://localhost:8000/api/health
+# Check DNS resolution
+nslookup medical-data-validator-production.up.railway.app
 
-# Test file upload
-curl -X POST -F "file=@test_data.csv" http://localhost:8000/api/validate/file
+# Test port connectivity
+telnet medical-data-validator-production.up.railway.app 443
 ```
 
-### Verify Installation
-
+### Performance Analysis
 ```bash
-# Check installed packages
-pip list | grep medical
+# Monitor system resources
+htop
+iotop
+netstat -i
 
-# Check package structure
-python -c "import medical_data_validator; print(medical_data_validator.__file__)"
+# Profile application
+python -m cProfile -o profile.stats launch_api.py
 
-# Run tests
-python -m pytest tests/
+# Analyze profile
+python -c "import pstats; pstats.Stats('profile.stats').sort_stats('cumulative').print_stats(10)"
 ```
 
-## Getting Help
+## 🛠️ Advanced Troubleshooting
 
-If you're still experiencing issues:
+### Database Issues
+```bash
+# Check database connection
+python -c "from medical_data_validator.database import db; print(db.engine.execute('SELECT 1').fetchone())"
 
-1. **Check the logs** for detailed error messages
-2. **Search existing issues** on GitHub
-3. **Create a new issue** with:
-   - Error message and traceback
-   - Steps to reproduce
-   - System information (OS, Python version)
-   - Package versions
-4. **Contact support**: ranaehtashamali1@gmail.com
+# Reset database (if using SQLite)
+rm medical_validator.db
+python -c "from medical_data_validator.database import init_db; init_db()"
+```
 
-## System Requirements
+### Memory Issues
+```bash
+# Check memory usage
+free -h
+ps aux --sort=-%mem | head
 
-### Minimum Requirements
-- Python 3.8+
-- 4GB RAM
-- 100MB disk space
-- Internet connection for package installation
+# Increase swap space
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+```
 
-### Recommended Requirements
-- Python 3.11+
-- 8GB RAM
-- 500MB disk space
-- SSD storage for better performance
+### SSL/TLS Issues
+```bash
+# Check SSL certificate
+openssl s_client -connect medical-data-validator-production.up.railway.app:443
 
-### Supported Platforms
-- Windows 10/11
-- macOS 10.15+
-- Ubuntu 18.04+
-- CentOS 7+
+# Test HTTPS connectivity
+curl -I https://medical-data-validator-production.up.railway.app/api/health
+
+# Check certificate validity
+echo | openssl s_client -servername medical-data-validator-production.up.railway.app -connect medical-data-validator-production.up.railway.app:443 2>/dev/null | openssl x509 -noout -dates
+```
+
+## 📊 Monitoring and Alerts
+
+### Health Monitoring
+```bash
+# Set up health checks
+while true; do
+    curl -f https://medical-data-validator-production.up.railway.app/api/health || echo "API down at $(date)"
+    sleep 60
+done
+```
+
+### Performance Monitoring
+```bash
+# Monitor response times
+curl -w "@curl-format.txt" -o /dev/null -s https://medical-data-validator-production.up.railway.app/api/health
+
+# Create curl format file
+cat > curl-format.txt << EOF
+     time_namelookup:  %{time_namelookup}\n
+        time_connect:  %{time_connect}\n
+     time_appconnect:  %{time_appconnect}\n
+    time_pretransfer:  %{time_pretransfer}\n
+       time_redirect:  %{time_redirect}\n
+  time_starttransfer:  %{time_starttransfer}\n
+                     ----------\n
+          time_total:  %{time_total}\n
+EOF
+```
+
+### Alert Configuration
+```python
+# Configure alerts for common issues
+ALERT_CONFIG = {
+    'compliance_threshold': 80,
+    'response_time_threshold': 5000,  # ms
+    'error_rate_threshold': 0.05,
+    'notification_channels': ['email', 'slack']
+}
+```
+
+## 🔧 Configuration Fixes
+
+### Environment Variables
+```bash
+# Essential environment variables
+export FLASK_ENV=production
+export SECRET_KEY=your-secret-key-here
+export ALLOWED_ORIGINS=https://medical-data-validator-production.up.railway.app
+export ENABLE_COMPLIANCE=true
+export ENABLE_ANALYTICS=true
+export ENABLE_MONITORING=true
+
+# Performance tuning
+export WORKER_PROCESSES=4
+export MAX_FILE_SIZE=16777216
+export TIMEOUT=300
+```
+
+### Application Configuration
+```python
+# Flask configuration
+app.config.update(
+    SECRET_KEY=os.environ.get('SECRET_KEY'),
+    MAX_CONTENT_LENGTH=16 * 1024 * 1024,  # 16MB
+    UPLOAD_FOLDER='/tmp/uploads',
+    ALLOWED_EXTENSIONS={'csv', 'xlsx', 'json', 'parquet'}
+)
+
+# CORS configuration
+CORS(app, origins=[
+    'https://medical-data-validator-production.up.railway.app',
+    'https://yourdomain.com'
+])
+```
+
+## 📞 Getting Help
+
+### Before Contacting Support
+
+1. **Check this guide** for your specific issue
+2. **Review logs** for error messages
+3. **Test with minimal data** to isolate the problem
+4. **Check system requirements** and dependencies
+5. **Try the health checks** above
+
+### Contact Information
+
+- **Documentation**: https://medical-data-validator-production.up.railway.app/docs
+- **API Documentation**: https://medical-data-validator-production.up.railway.app/api/docs
+- **Health Check**: https://medical-data-validator-production.up.railway.app/api/health
+- **GitHub Issues**: [Report bugs and request features](https://github.com/RanaEhtashamAli/medical-data-validator/issues)
+- **Email Support**: ranaehtashamali1@gmail.com
+
+### When Reporting Issues
+
+Please include:
+- **Error messages** and stack traces
+- **System information** (OS, Python version, etc.)
+- **Steps to reproduce** the issue
+- **Sample data** (if applicable)
+- **Log files** (with sensitive information removed)
+
+## 🎯 Quick Fixes
+
+### Common Solutions
+
+```bash
+# Restart everything
+docker-compose down
+docker-compose up -d
+
+# Clear cache
+rm -rf __pycache__/
+rm -rf .pytest_cache/
+
+# Reset configuration
+cp .env.example .env
+# Edit .env with your settings
+
+# Update dependencies
+pip install -r requirements.txt --upgrade
+
+# Check disk space
+df -h
+du -sh *
+
+# Restart services
+sudo systemctl restart medical-validator
+```
 
 ---
 
-**Last Updated**: January 2024  
-**Version**: 1.0 
+**Medical Data Validator v1.2 - Troubleshooting Guide**
+
+*For additional help, check our [documentation](https://medical-data-validator-production.up.railway.app/docs) or [contact support](mailto:ranaehtashamali1@gmail.com).* 

@@ -27,6 +27,9 @@ RUN pip install --no-cache-dir -e ".[web-all]"
 # Copy the rest of the application code
 COPY . .
 
+# Create compliance templates directory and ensure it exists
+RUN mkdir -p /app/compliance_templates
+
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash app \
     && chown -R app:app /app

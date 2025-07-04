@@ -11,6 +11,18 @@ from typing import Any, Dict, List, Optional, Union
 import pandas as pd
 from pydantic import BaseModel
 
+# Import compliance engine for v1.2
+try:
+    from .compliance import ComplianceEngine
+    from .compliance_templates import template_manager
+    from .analytics import AdvancedAnalytics
+    from .monitoring import monitor
+except ImportError:
+    ComplianceEngine = None
+    template_manager = None
+    AdvancedAnalytics = None
+    monitor = None
+
 
 @dataclass
 class ValidationIssue:
@@ -98,15 +110,46 @@ class MedicalDataValidator:
     medical-specific quality checks.
     """
     
-    def __init__(self, rules: Optional[List[ValidationRule]] = None):
+    def __init__(self, rules: Optional[List[ValidationRule]] = None, enable_compliance: bool = True, 
+                 compliance_template: Optional[str] = None, enable_analytics: bool = True, 
+                 enable_monitoring: bool = True):
         """
         Initialize the validator with optional validation rules.
         
         Args:
             rules: List of validation rules to apply
+            enable_compliance: Whether to enable advanced compliance validation (v1.2)
+            compliance_template: Name of compliance template to apply (v1.2)
+            enable_analytics: Whether to enable advanced analytics (v1.2)
+            enable_monitoring: Whether to enable real-time monitoring (v1.2)
         """
         self.rules = rules or []
         self._validators = {}
+        self.enable_compliance = enable_compliance
+        self.compliance_template = compliance_template
+        self.enable_analytics = enable_analytics
+        self.enable_monitoring = enable_monitoring
+        
+        # Initialize compliance engine if available
+        if enable_compliance and ComplianceEngine is not None:
+            self.compliance_engine = ComplianceEngine()
+            # Apply template if specified
+            if compliance_template and template_manager is not None:
+                template_manager.apply_template(compliance_template, self.compliance_engine)
+                # Set template_applied attribute on compliance engine
+                self.compliance_engine.template_applied = compliance_template
+        else:
+            self.compliance_engine = None
+        
+        # Initialize analytics engine if available
+        if enable_analytics and AdvancedAnalytics is not None:
+            self.analytics_engine = AdvancedAnalytics()
+        else:
+            self.analytics_engine = None
+        
+        # Start monitoring if enabled
+        if enable_monitoring and monitor is not None:
+            monitor.start_monitoring()
     
     def add_rule(self, rule: ValidationRule) -> None:
         """Add a validation rule to the validator."""
@@ -115,6 +158,42 @@ class MedicalDataValidator:
     def add_validator(self, name: str, validator: Any) -> None:
         """Add a custom validator function."""
         self._validators[name] = validator
+    
+    def add_custom_compliance_rule(self, name: str, pattern: str, severity: str = 'medium', 
+                                  field_pattern: Optional[str] = None, description: str = "", 
+                                  recommendation: Optional[str] = None) -> None:
+        """Add a custom compliance rule (v1.2)."""
+        if self.compliance_engine is not None:
+            self.compliance_engine.add_custom_pattern(name, pattern, severity, field_pattern, description, recommendation)
+    
+    def remove_custom_compliance_rule(self, rule_name: str) -> bool:
+        """Remove a custom compliance rule (v1.2)."""
+        if self.compliance_engine is not None:
+            return self.compliance_engine.remove_custom_rule(rule_name)
+        return False
+    
+    def get_custom_compliance_rules(self) -> List[Dict[str, Any]]:
+        """Get all custom compliance rules (v1.2)."""
+        if self.compliance_engine is not None:
+            rules = self.compliance_engine.get_custom_rules()
+            return [
+                {
+                    'name': rule.name,
+                    'description': rule.description,
+                    'pattern': rule.pattern,
+                    'severity': rule.severity,
+                    'field_pattern': rule.field_pattern,
+                    'recommendation': rule.recommendation
+                }
+                for rule in rules
+            ]
+        return []
+    
+    def get_available_compliance_templates(self) -> Dict[str, str]:
+        """Get available compliance templates (v1.2)."""
+        if template_manager is not None:
+            return template_manager.list_templates()
+        return {}
     
     def validate(self, data: Union[pd.DataFrame, Dict[str, List], List[Dict]]) -> ValidationResult:
         """
@@ -127,6 +206,9 @@ class MedicalDataValidator:
         Returns:
             ValidationResult containing validation issues and summary
         """
+        import time
+        start_time = time.time()
+        
         # Convert data to DataFrame if needed
         if isinstance(data, dict):
             df = pd.DataFrame(data)
@@ -175,7 +257,54 @@ class MedicalDataValidator:
         # Generate summary
         result.summary = self._generate_summary(df, result)
         
+        # Add compliance validation if enabled (v1.2)
+        if self.compliance_engine is not None:
+            try:
+                compliance_report = self.compliance_engine.comprehensive_compliance_validation(df)
+                result.summary['compliance_report'] = compliance_report
+            except Exception as e:
+                # Add compliance validation error
+                error_issue = ValidationIssue(
+                    severity="warning",
+                    message=f"Compliance validation failed: {str(e)}",
+                    rule_name="compliance_engine"
+                )
+                result.add_issue(error_issue)
+        
+        # Add analytics if enabled (v1.2)
+        if self.analytics_engine is not None:
+            try:
+                analytics_report = self.analytics_engine.comprehensive_analysis(df)
+                result.summary['analytics_report'] = analytics_report
+            except Exception as e:
+                # Add analytics error
+                error_issue = ValidationIssue(
+                    severity="info",
+                    message=f"Analytics analysis failed: {str(e)}",
+                )
+                result.add_issue(error_issue)
+        
+        # Record monitoring data if enabled (v1.2)
+        if self.enable_monitoring and monitor is not None:
+            try:
+                processing_time = time.time() - start_time
+                monitor.record_validation_result(result.to_dict(), processing_time)
+            except Exception as e:
+                print(f"Monitoring recording failed: {e}")
+        
         return result
+    
+    def validate_dataframe(self, df: pd.DataFrame) -> ValidationResult:
+        """
+        Validate a pandas DataFrame (alias for validate method).
+        
+        Args:
+            df: Pandas DataFrame to validate
+        
+        Returns:
+            ValidationResult containing validation issues and summary
+        """
+        return self.validate(df)
     
     def _generate_summary(self, df: pd.DataFrame, result: ValidationResult) -> Dict[str, Any]:
         """Generate a summary of the validation results."""

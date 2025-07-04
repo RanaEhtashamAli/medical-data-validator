@@ -10,9 +10,10 @@ if __name__ == "__main__":
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     sys.path.insert(0, project_root)
 
-from flask import Flask
+from flask import Flask, jsonify
 import dash
 import dash_bootstrap_components as dbc
+from werkzeug.exceptions import HTTPException
 
 try:
     from medical_data_validator.dashboard.routes import register_routes
@@ -30,6 +31,21 @@ def create_dashboard_app():
 
     # Register Flask routes
     register_routes(app)
+
+    @app.errorhandler(Exception)
+    def handle_exception(e):
+        # Don't handle HTTP exceptions (like 404, 405, etc.)
+        if isinstance(e, HTTPException):
+            return e
+        
+        import traceback
+        print("GLOBAL FLASK ERROR:", e)
+        print(traceback.format_exc())
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
 
     # Initialize Dash
     dash_app = dash.Dash(

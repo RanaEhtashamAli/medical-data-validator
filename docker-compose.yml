@@ -12,8 +12,16 @@ services:
       - API_WORKERS=4
       - API_DEBUG=false
       - LOG_LEVEL=INFO
+      # v1.2 specific environment variables
+      - ENABLE_V12_COMPLIANCE=true
+      - ENABLE_V12_ANALYTICS=true
+      - ENABLE_V12_MONITORING=true
+      - COMPLIANCE_TEMPLATES_PATH=/app/compliance_templates
+      - ANALYTICS_CACHE_ENABLED=true
+      - MONITORING_ALERT_THRESHOLD=80
     volumes:
       - ./logs:/app/logs
+      - ./compliance_templates:/app/compliance_templates
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
@@ -30,8 +38,15 @@ services:
     environment:
       - FLASK_ENV=production
       - FLASK_DEBUG=false
+      # v1.2 specific environment variables
+      - ENABLE_V12_COMPLIANCE=true
+      - ENABLE_V12_ANALYTICS=true
+      - ENABLE_V12_MONITORING=true
+      - COMPLIANCE_TEMPLATES_PATH=/app/compliance_templates
+      - ANALYTICS_CACHE_ENABLED=true
     volumes:
       - ./logs:/app/logs
+      - ./compliance_templates:/app/compliance_templates
     restart: unless-stopped
     command: ["python", "medical_data_validator_cli.py", "dashboard"]
     depends_on:
@@ -47,9 +62,17 @@ services:
       - API_DEBUG=true
       - FLASK_DEBUG=true
       - LOG_LEVEL=DEBUG
+      # v1.2 specific environment variables (development)
+      - ENABLE_V12_COMPLIANCE=true
+      - ENABLE_V12_ANALYTICS=true
+      - ENABLE_V12_MONITORING=true
+      - COMPLIANCE_TEMPLATES_PATH=/app/compliance_templates
+      - ANALYTICS_CACHE_ENABLED=false
+      - MONITORING_ALERT_THRESHOLD=70
     volumes:
       - .:/app
       - ./logs:/app/logs
+      - ./compliance_templates:/app/compliance_templates
     restart: unless-stopped
     command: ["python", "api.py", "--debug"]
 

@@ -102,11 +102,42 @@ def generate_charts(data: pd.DataFrame, result: ValidationResult) -> Dict[str, A
             labels={'x': 'Column', 'y': 'Missing Count'}
         )
         charts['missing_values'] = fig_missing.to_dict()
+    else:
+        # No missing values - create a message chart
+        charts['missing_values'] = {
+            'data': [{
+                'type': 'bar',
+                'x': ['No Missing Values'],
+                'y': [0],
+                'marker': {'color': '#28a745'}
+            }],
+            'layout': {
+                'title': 'Missing Values by Column',
+                'showlegend': False,
+                'yaxis': {'title': 'Missing Count'},
+                'xaxis': {'title': 'Column'}
+            }
+        }
     dtype_counts = data.dtypes.value_counts()
-    fig_dtypes = px.pie(
-        values=dtype_counts.values,
-        names=dtype_counts.index.astype(str),
-        title='Data Types Distribution'
-    )
-    charts['data_types'] = fig_dtypes.to_dict()
+    if len(dtype_counts) > 0:
+        fig_dtypes = px.pie(
+            values=dtype_counts.values,
+            names=dtype_counts.index.astype(str),
+            title='Data Types Distribution'
+        )
+        charts['data_types'] = fig_dtypes.to_dict()
+    else:
+        # No data types found - create a simple message chart
+        charts['data_types'] = {
+            'data': [{
+                'type': 'pie',
+                'values': [1],
+                'labels': ['No Data Types'],
+                'marker': {'colors': ['#6c757d']}
+            }],
+            'layout': {
+                'title': 'Data Types Distribution',
+                'showlegend': False
+            }
+        }
     return charts 

@@ -129,6 +129,26 @@
                             <i class="fas fa-info-circle"></i> About
                         </a>
                     </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="docsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-book"></i> Documentation
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="docsDropdown">
+                            <li><a class="dropdown-item" href="https://medical-data-validator-production.up.railway.app/docs" target="_blank">
+                                <i class="fas fa-file-alt"></i> User Guide
+                            </a></li>
+                            <li><a class="dropdown-item" href="https://medical-data-validator-production.up.railway.app/api/docs" target="_blank">
+                                <i class="fas fa-code"></i> API Documentation
+                            </a></li>
+                            <li><a class="dropdown-item" href="https://medical-data-validator-production.up.railway.app/api/health" target="_blank">
+                                <i class="fas fa-heartbeat"></i> Health Check
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="https://github.com/RanaEhtashamAli/medical-data-validator" target="_blank">
+                                <i class="fab fa-github"></i> GitHub Repository
+                            </a></li>
+                        </ul>
+                    </li>
                 </ul>
             </div>
         </div>
@@ -423,6 +443,15 @@
                     margin: { l: 50, r: 20, t: 50, b: 50 }
                 };
                 Plotly.newPlot('missingChart', charts.missing_values.data, layout, plotlyConfig);
+            } else {
+                // No missing values chart available - show a message
+                document.getElementById('missingChart').innerHTML = `
+                    <div class="chart-container text-center p-4">
+                        <i class="fas fa-chart-bar fa-3x text-muted mb-3"></i>
+                        <h6 class="text-muted">Missing Values Chart</h6>
+                        <p class="text-muted small">No missing values data available</p>
+                    </div>
+                `;
             }
             if (charts.severity_distribution) {
                 const layout = {
@@ -431,6 +460,15 @@
                     margin: { l: 20, r: 20, t: 50, b: 20 }
                 };
                 Plotly.newPlot('severityChart', charts.severity_distribution.data, layout, plotlyConfig);
+            } else {
+                // No severity distribution chart available
+                document.getElementById('severityChart').innerHTML = `
+                    <div class="chart-container text-center p-4">
+                        <i class="fas fa-chart-pie fa-3x text-muted mb-3"></i>
+                        <h6 class="text-muted">Severity Distribution</h6>
+                        <p class="text-muted small">No severity data available</p>
+                    </div>
+                `;
             }
             if (charts.column_issues) {
                 const layout = {
@@ -439,6 +477,15 @@
                     margin: { l: 50, r: 20, t: 50, b: 80 }
                 };
                 Plotly.newPlot('columnChart', charts.column_issues.data, layout, plotlyConfig);
+            } else {
+                // No column issues chart available
+                document.getElementById('columnChart').innerHTML = `
+                    <div class="chart-container text-center p-4">
+                        <i class="fas fa-chart-bar fa-3x text-muted mb-3"></i>
+                        <h6 class="text-muted">Column Issues</h6>
+                        <p class="text-muted small">No column issues data available</p>
+                    </div>
+                `;
             }
             if (charts.data_types) {
                 const layout = {
@@ -447,6 +494,15 @@
                     margin: { l: 20, r: 20, t: 50, b: 20 }
                 };
                 Plotly.newPlot('dtypeChart', charts.data_types.data, layout, plotlyConfig);
+            } else {
+                // No data types chart available
+                document.getElementById('dtypeChart').innerHTML = `
+                    <div class="chart-container text-center p-4">
+                        <i class="fas fa-chart-pie fa-3x text-muted mb-3"></i>
+                        <h6 class="text-muted">Data Types Distribution</h6>
+                        <p class="text-muted small">No data types information available</p>
+                    </div>
+                `;
             }
             
             // Display detailed issues
@@ -552,6 +608,7 @@
                 tableDiv.innerHTML = '<div class="alert alert-info">No compliance report available.</div>';
                 return;
             }
+            
             let html = `<table class="table table-bordered table-striped">
                 <thead>
                     <tr>
@@ -562,17 +619,69 @@
                     </tr>
                 </thead>
                 <tbody>`;
-            for (const [standard, info] of Object.entries(report)) {
-                const status = info.compliant ? '<span class="badge bg-success">Compliant</span>' : '<span class="badge bg-danger">Non-compliant</span>';
-                const score = info.score !== undefined ? info.score : '';
-                const issues = info.issues && info.issues.length > 0 ? `<ul>${info.issues.map(i => `<li>${i}</li>`).join('')}</ul>` : '<span class="text-success">None</span>';
+            
+            // Handle both v1.2 nested structure and legacy flat structure
+            let standards = {};
+            
+            if (report.standards && typeof report.standards === 'object') {
+                // v1.2 structure: report.standards.{standard_name}
+                standards = report.standards;
+            } else {
+                // Legacy structure: report.{standard_name}
+                standards = report;
+            }
+            
+            for (const [standard, info] of Object.entries(standards)) {
+                // Skip nested objects that don't have compliance data
+                if (typeof info !== 'object' || info === null) {
+                    continue;
+                }
+                
+                // Handle different compliance data structures
+                let compliant = false;
+                let score = '';
+                let issues = [];
+                let riskLevel = '';
+                
+                if ('compliant' in info) {
+                    // Legacy structure
+                    compliant = info.compliant;
+                    score = info.score !== undefined ? info.score : '';
+                    issues = info.issues || [];
+                } else if ('score' in info) {
+                    // v1.2 structure - check if compliant based on score and violations
+                    score = info.score;
+                    riskLevel = info.risk_level || '';
+                    const violationsCount = info.violations_count || 0;
+                    compliant = violationsCount === 0;
+                    
+                    // Get violations from different possible locations
+                    if (info.violations && Array.isArray(info.violations)) {
+                        issues = info.violations.map(v => {
+                            if (typeof v === 'string') return v;
+                            if (typeof v === 'object' && v.message) return v.message;
+                            return JSON.stringify(v);
+                        });
+                    } else if (info.recommendations && Array.isArray(info.recommendations)) {
+                        issues = info.recommendations;
+                    }
+                } else {
+                    // Skip if no recognizable structure
+                    continue;
+                }
+                
+                const status = compliant ? '<span class="badge bg-success">Compliant</span>' : '<span class="badge bg-danger">Non-compliant</span>';
+                const scoreDisplay = score !== '' ? `${score}${riskLevel ? ` (${riskLevel})` : ''}` : '';
+                const issuesDisplay = issues.length > 0 ? `<ul>${issues.map(i => `<li>${i}</li>`).join('')}</ul>` : '<span class="text-success">None</span>';
+                
                 html += `<tr>
                     <td>${standard.toUpperCase()}</td>
                     <td>${status}</td>
-                    <td>${score}</td>
-                    <td>${issues}</td>
+                    <td>${scoreDisplay}</td>
+                    <td>${issuesDisplay}</td>
                 </tr>`;
             }
+            
             html += '</tbody></table>';
             tableDiv.innerHTML = html;
         }
