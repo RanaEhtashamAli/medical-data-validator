@@ -37,7 +37,7 @@
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container">
-            <a class="navbar-brand" href="/">
+            <a class="navbar-brand" href="/home">
                 <i class="fas fa-shield-alt"></i> Medical Data Validator
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -46,13 +46,34 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="/">Home</a>
+                        <a class="nav-link active" href="/home">
+                            <i class="fas fa-home"></i> Home
+                        </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link active" href="/docs">Documentation</a>
+                        <a class="nav-link" href="/about">
+                            <i class="fas fa-info-circle"></i> About
+                        </a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/about">About</a>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="docsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-book"></i> Documentation
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="docsDropdown">
+                            <li><a class="dropdown-item" href="/docs" target="_blank">
+                                <i class="fas fa-file-alt"></i> User Guide
+                            </a></li>
+                            <li><a class="dropdown-item" href="/docs/swagger" target="_blank">
+                                <i class="fas fa-code"></i> API Documentation
+                            </a></li>
+                            <li><a class="dropdown-item" href="/api/health" target="_blank">
+                                <i class="fas fa-heartbeat"></i> Health Check
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="https://github.com/RanaEhtashamAli/medical-data-validator" target="_blank">
+                                <i class="fab fa-github"></i> GitHub Repository
+                            </a></li>
+                        </ul>
                     </li>
                 </ul>
             </div>
