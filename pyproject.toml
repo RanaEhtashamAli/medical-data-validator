@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "medical-data-validator"
-version = "1.2.0"
+version = "1.2.1"
 description = "A comprehensive medical data validation library for healthcare datasets"
 readme = "README.md"
 license = {text = "MIT"}

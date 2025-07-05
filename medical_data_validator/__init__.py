@@ -5,7 +5,7 @@ This package provides tools for validating medical data including schema validat
 PHI/PII detection, data quality checks, and medical code validation.
 """
 
-__version__ = "0.2.3"
+__version__ = "1.2.1"
 __author__ = "Rana Ehtasham Ali"
 __email__ = "ranaehtashamali1@gmail.com"
 
