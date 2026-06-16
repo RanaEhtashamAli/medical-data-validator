@@ -1178,6 +1178,18 @@ def register_routes(app):
     if register_audit_routes:
         register_audit_routes(app)
 
+    # Registry routes (/api/registry/*)
+    try:
+        from medical_data_validator.registry import register_registry_routes
+    except ImportError:
+        try:
+            from ..registry import register_registry_routes
+        except ImportError:
+            register_registry_routes = None
+
+    if register_registry_routes:
+        register_registry_routes(app)
+
     # Create and register API Blueprint
     api_bp = create_api_blueprint()
     app.register_blueprint(api_bp)
