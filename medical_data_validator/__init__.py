@@ -45,6 +45,14 @@ from .performance import (
     performance_monitor,
 )
 
+try:
+    from .compliance import ComplianceStandard
+    from .plugins import FHIRCompliancePlugin, SNOMEDCompliancePlugin
+except ImportError:
+    ComplianceStandard = None  # type: ignore
+    FHIRCompliancePlugin = None  # type: ignore
+    SNOMEDCompliancePlugin = None  # type: ignore
+
 __all__ = [
     # Core classes
     "MedicalDataValidator",
@@ -77,4 +85,9 @@ __all__ = [
     "OptimizedMedicalDataValidator",
     "timed_validation",
     "performance_monitor",
+
+    # Pluggable compliance standards
+    "ComplianceStandard",
+    "FHIRCompliancePlugin",
+    "SNOMEDCompliancePlugin",
 ] 

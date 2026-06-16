@@ -3,6 +3,7 @@ Advanced Compliance Validation Engine for Medical Data Validator v1.2
 """
 
 import re
+import abc
 import pandas as pd
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
@@ -39,9 +40,28 @@ class CustomComplianceRule:
     field_pattern: Optional[str] = None  # Optional pattern to match column names
     recommendation: Optional[str] = None
 
+class ComplianceStandard(abc.ABC):
+    """
+    Plugin interface for adding compliance standards to the ComplianceEngine.
+
+    Implement this ABC and register an instance with
+    ``engine.register_plugin(plugin)`` to extend the engine with a new
+    standard (e.g., FHIR R4, SNOMED CT, HL7 v2, CDISC ODM, …).
+    """
+
+    @property
+    @abc.abstractmethod
+    def name(self) -> str:
+        """Short identifier used as the key in the compliance report (e.g. 'fhir_r4')."""
+
+    @abc.abstractmethod
+    def validate(self, df: pd.DataFrame) -> List[ComplianceViolation]:
+        """Run this standard's checks against *df* and return any violations."""
+
+
 class ComplianceEngine:
     """Advanced compliance validation engine for medical data."""
-    
+
     def __init__(self):
         # Use the canonical shared PHI_PATTERNS so all checkers agree on definitions
         self.hipaa_patterns = {
@@ -52,6 +72,22 @@ class ComplianceEngine:
         }
         self.custom_rules = []
         self.template_applied = None
+        self._plugins: List[ComplianceStandard] = []
+
+    def register_plugin(self, plugin: ComplianceStandard) -> None:
+        """Register a ComplianceStandard plugin.  Duplicate names are replaced."""
+        self._plugins = [p for p in self._plugins if p.name != plugin.name]
+        self._plugins.append(plugin)
+
+    def unregister_plugin(self, name: str) -> bool:
+        """Remove a plugin by name.  Returns True if it was present."""
+        before = len(self._plugins)
+        self._plugins = [p for p in self._plugins if p.name != name]
+        return len(self._plugins) < before
+
+    def list_plugins(self) -> List[str]:
+        """Return the names of all registered plugins."""
+        return [p.name for p in self._plugins]
     
     def add_custom_rule(self, rule: CustomComplianceRule) -> None:
         """Add a custom compliance rule."""
@@ -269,66 +305,93 @@ class ComplianceEngine:
         fda_violations_dict = [violation_to_dict(v) for v in fda_violations]
         custom_violations_dict = [violation_to_dict(v) for v in custom_violations]
         
-        # Collect all violations
-        all_violations_dict = hipaa_violations_dict + gdpr_violations_dict + fda_violations_dict + custom_violations_dict
-        
-        # Structure expected by tests
-        report = {
-            'standards': {
-                'hipaa': {
-                    'score': convert_numpy_types(hipaa_score),
-                    'risk_level': hipaa_risk,
-                    'violations': hipaa_violations_dict,
-                    'violations_count': len(hipaa_violations),
-                    'recommendations': hipaa_recommendations,
-                    'compliant': len(hipaa_violations) == 0
-                },
-                'gdpr': {
-                    'score': convert_numpy_types(gdpr_score),
-                    'risk_level': gdpr_risk,
-                    'violations': gdpr_violations_dict,
-                    'violations_count': len(gdpr_violations),
-                    'recommendations': gdpr_recommendations,
-                    'compliant': len(gdpr_violations) == 0
-                },
-                'fda': {
-                    'score': convert_numpy_types(fda_score),
-                    'risk_level': fda_risk,
-                    'violations': fda_violations_dict,
-                    'violations_count': len(fda_violations),
-                    'recommendations': fda_recommendations,
-                    'compliant': len(fda_violations) == 0
-                },
-                'medical_coding': {
-                    'icd10_score': convert_numpy_types(icd10_score),
-                    'loinc_score': convert_numpy_types(loinc_score),
-                    'cpt_score': convert_numpy_types(cpt_score),
-                    'icd10': {
-                        'score': convert_numpy_types(icd10_score),
-                        'risk_level': icd10_risk,
-                        'violations_count': convert_numpy_types(icd10_violations),
-                        'compliant': convert_numpy_types(icd10_violations) == 0
-                    },
-                    'loinc': {
-                        'score': convert_numpy_types(loinc_score),
-                        'risk_level': loinc_risk,
-                        'violations_count': convert_numpy_types(loinc_violations),
-                        'compliant': convert_numpy_types(loinc_violations) == 0
-                    },
-                    'cpt': {
-                        'score': convert_numpy_types(cpt_score),
-                        'risk_level': cpt_risk,
-                        'violations_count': convert_numpy_types(cpt_violations),
-                        'compliant': convert_numpy_types(cpt_violations) == 0
-                    }
+        # Run registered plugins and merge their results
+        plugin_violations_dict = []
+        plugin_standard_reports = {}
+        for plugin in self._plugins:
+            try:
+                pv = plugin.validate(df)
+                pv_dict = [violation_to_dict(v) for v in pv]
+                plugin_violations_dict.extend(pv_dict)
+                p_score = max(0.0, 100.0 - len(pv) * 10.0)
+                p_risk = 'low' if p_score >= 90 else ('medium' if p_score >= 70 else 'high')
+                plugin_standard_reports[plugin.name] = {
+                    'score': p_score,
+                    'risk_level': p_risk,
+                    'violations': pv_dict,
+                    'violations_count': len(pv),
+                    'compliant': len(pv) == 0,
                 }
+            except Exception:
+                pass
+
+        # Collect all violations
+        all_violations_dict = (
+            hipaa_violations_dict + gdpr_violations_dict
+            + fda_violations_dict + custom_violations_dict
+            + plugin_violations_dict
+        )
+        
+        # Merge built-in and plugin standards
+        standards_dict = {
+            'hipaa': {
+                'score': convert_numpy_types(hipaa_score),
+                'risk_level': hipaa_risk,
+                'violations': hipaa_violations_dict,
+                'violations_count': len(hipaa_violations),
+                'recommendations': hipaa_recommendations,
+                'compliant': len(hipaa_violations) == 0,
             },
+            'gdpr': {
+                'score': convert_numpy_types(gdpr_score),
+                'risk_level': gdpr_risk,
+                'violations': gdpr_violations_dict,
+                'violations_count': len(gdpr_violations),
+                'recommendations': gdpr_recommendations,
+                'compliant': len(gdpr_violations) == 0,
+            },
+            'fda': {
+                'score': convert_numpy_types(fda_score),
+                'risk_level': fda_risk,
+                'violations': fda_violations_dict,
+                'violations_count': len(fda_violations),
+                'recommendations': fda_recommendations,
+                'compliant': len(fda_violations) == 0,
+            },
+            'medical_coding': {
+                'icd10_score': convert_numpy_types(icd10_score),
+                'loinc_score': convert_numpy_types(loinc_score),
+                'cpt_score': convert_numpy_types(cpt_score),
+                'icd10': {
+                    'score': convert_numpy_types(icd10_score),
+                    'risk_level': icd10_risk,
+                    'violations_count': convert_numpy_types(icd10_violations),
+                    'compliant': convert_numpy_types(icd10_violations) == 0,
+                },
+                'loinc': {
+                    'score': convert_numpy_types(loinc_score),
+                    'risk_level': loinc_risk,
+                    'violations_count': convert_numpy_types(loinc_violations),
+                    'compliant': convert_numpy_types(loinc_violations) == 0,
+                },
+                'cpt': {
+                    'score': convert_numpy_types(cpt_score),
+                    'risk_level': cpt_risk,
+                    'violations_count': convert_numpy_types(cpt_violations),
+                    'compliant': convert_numpy_types(cpt_violations) == 0,
+                },
+            },
+        }
+        standards_dict.update(plugin_standard_reports)
+
+        report = {
+            'standards': standards_dict,
             'template_applied': getattr(self, 'template_applied', None),
             'all_violations': all_violations_dict,
             'overall_score': convert_numpy_types(overall_score),
-            'risk_level': overall_risk
+            'risk_level': overall_risk,
         }
-        
+
         return report
 
     # Implement dummy _generate_hipaa_report, _generate_gdpr_report, etc., if not already present. 
