@@ -1108,6 +1108,30 @@ def create_validator(detect_phi: bool, quality_checks: bool, profile: str, enabl
 
 def register_routes(app):
     """Register all routes (UI and API) with the Flask app."""
+    # Auth routes (/api/auth/*)
+    try:
+        from medical_data_validator.auth import register_auth_routes
+    except ImportError:
+        try:
+            from ..auth import register_auth_routes
+        except ImportError:
+            register_auth_routes = None
+
+    if register_auth_routes:
+        register_auth_routes(app)
+
+    # Audit routes (/api/audit)
+    try:
+        from medical_data_validator.audit import register_audit_routes
+    except ImportError:
+        try:
+            from ..audit import register_audit_routes
+        except ImportError:
+            register_audit_routes = None
+
+    if register_audit_routes:
+        register_audit_routes(app)
+
     # Create and register API Blueprint
     api_bp = create_api_blueprint()
     app.register_blueprint(api_bp)

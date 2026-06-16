@@ -1,0 +1,156 @@
+"""Tests for the immutable audit trail (Phase 3b)."""
+
+import os
+import tempfile
+import pytest
+import pandas as pd
+
+# Point the module at a throw-away DB for every test run
+_tmp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+_tmp_db.close()
+os.environ['AUDIT_DB_PATH'] = _tmp_db.name
+
+
+import medical_data_validator.audit as audit
+
+
+@pytest.fixture(autouse=True)
+def _reset_audit_conn():
+    """Close the module-level connection and delete the DB file between tests."""
+    yield
+    if audit._conn is not None:
+        audit._conn.close()
+        audit._conn = None
+    try:
+        os.unlink(_tmp_db.name)
+    except FileNotFoundError:
+        pass
+    # Recreate empty file so next test can open a fresh DB
+    open(_tmp_db.name, 'w').close()
+
+
+class TestLogEvent:
+    def test_returns_uuid_string(self):
+        rid = audit.log_event('validation')
+        assert isinstance(rid, str) and len(rid) == 36
+
+    def test_record_persists_in_db(self):
+        rid = audit.log_event('validation', username='alice', tenant='acme')
+        rows = audit.query_log()
+        assert any(r['id'] == rid for r in rows)
+
+    def test_all_fields_stored(self):
+        rid = audit.log_event(
+            'compliance_check',
+            username='bob',
+            tenant='hospital',
+            dataset_id='ds-001',
+            dataset_hash='abc123',
+            rules_applied=['RuleA', 'RuleB'],
+            result_summary={'is_valid': True},
+            ip_address='10.0.0.1',
+            extra={'note': 'test'},
+        )
+        rows = audit.query_log()
+        row = next(r for r in rows if r['id'] == rid)
+        assert row['event_type'] == 'compliance_check'
+        assert row['username'] == 'bob'
+        assert row['tenant'] == 'hospital'
+        assert row['dataset_id'] == 'ds-001'
+        assert row['dataset_hash'] == 'abc123'
+        assert row['rules_applied'] == ['RuleA', 'RuleB']
+        assert row['result_summary'] == {'is_valid': True}
+        assert row['ip_address'] == '10.0.0.1'
+        assert row['extra'] == {'note': 'test'}
+
+    def test_multiple_events_all_persist(self):
+        audit.log_event('validation', tenant='t1')
+        audit.log_event('validation', tenant='t1')
+        audit.log_event('validation', tenant='t2')
+        assert audit.count_log() == 3
+
+
+class TestQueryLog:
+    def test_filter_by_tenant(self):
+        audit.log_event('validation', tenant='acme')
+        audit.log_event('validation', tenant='bigpharma')
+        rows = audit.query_log(tenant='acme')
+        assert len(rows) == 1 and rows[0]['tenant'] == 'acme'
+
+    def test_filter_by_username(self):
+        audit.log_event('validation', username='alice')
+        audit.log_event('validation', username='bob')
+        rows = audit.query_log(username='alice')
+        assert len(rows) == 1 and rows[0]['username'] == 'alice'
+
+    def test_filter_by_event_type(self):
+        audit.log_event('validation')
+        audit.log_event('anonymization')
+        rows = audit.query_log(event_type='anonymization')
+        assert len(rows) == 1 and rows[0]['event_type'] == 'anonymization'
+
+    def test_filter_by_dataset_id(self):
+        audit.log_event('validation', dataset_id='ds-42')
+        audit.log_event('validation', dataset_id='ds-99')
+        rows = audit.query_log(dataset_id='ds-42')
+        assert len(rows) == 1
+
+    def test_limit_and_offset(self):
+        for _ in range(5):
+            audit.log_event('validation')
+        page1 = audit.query_log(limit=3, offset=0)
+        page2 = audit.query_log(limit=3, offset=3)
+        assert len(page1) == 3
+        assert len(page2) == 2
+        all_ids = {r['id'] for r in page1} | {r['id'] for r in page2}
+        assert len(all_ids) == 5
+
+    def test_returns_newest_first(self):
+        rid1 = audit.log_event('validation')
+        rid2 = audit.log_event('validation')
+        rows = audit.query_log()
+        assert rows[0]['id'] == rid2
+        assert rows[1]['id'] == rid1
+
+
+class TestCountLog:
+    def test_count_all(self):
+        audit.log_event('validation')
+        audit.log_event('validation')
+        assert audit.count_log() == 2
+
+    def test_count_filtered(self):
+        audit.log_event('validation', tenant='x')
+        audit.log_event('validation', tenant='y')
+        assert audit.count_log(tenant='x') == 1
+
+
+class TestHashDataframe:
+    def test_same_df_same_hash(self):
+        df = pd.DataFrame({'a': [1, 2, 3], 'b': ['x', 'y', 'z']})
+        assert audit.hash_dataframe(df) == audit.hash_dataframe(df)
+
+    def test_different_content_different_hash(self):
+        df1 = pd.DataFrame({'a': [1, 2, 3]})
+        df2 = pd.DataFrame({'a': [1, 2, 4]})
+        assert audit.hash_dataframe(df1) != audit.hash_dataframe(df2)
+
+    def test_returns_64_char_hex(self):
+        df = pd.DataFrame({'col': [1]})
+        h = audit.hash_dataframe(df)
+        assert len(h) == 64 and all(c in '0123456789abcdef' for c in h)
+
+
+class TestCoreIntegration:
+    """Verify that MedicalDataValidator.validate() writes to the audit log."""
+
+    def test_validate_creates_audit_record(self):
+        from medical_data_validator.core import MedicalDataValidator
+        validator = MedicalDataValidator(
+            enable_compliance=False, enable_analytics=False, enable_monitoring=False
+        )
+        df = pd.DataFrame({'patient_id': [1, 2, 3], 'age': [25, 30, 45]})
+        validator.validate(df)
+        rows = audit.query_log(event_type='validation')
+        assert len(rows) >= 1
+        assert rows[0]['dataset_hash'] is not None

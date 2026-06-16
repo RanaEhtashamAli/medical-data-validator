@@ -18,6 +18,7 @@ try:
     from .compliance_templates import template_manager
     from .analytics import AdvancedAnalytics
     from .monitoring import monitor
+    from . import audit as _audit
 except ImportError as _v12_import_error:
     warnings.warn(
         f"One or more v1.2 feature modules could not be imported "
@@ -30,6 +31,7 @@ except ImportError as _v12_import_error:
     template_manager = None
     AdvancedAnalytics = None
     monitor = None
+    _audit = None
 
 
 @dataclass
@@ -311,7 +313,34 @@ class MedicalDataValidator:
                 monitor.record_validation_result(result.to_dict(), processing_time)
             except Exception as e:
                 print(f"Monitoring recording failed: {e}")
-        
+
+        # Append immutable audit record (best-effort; never breaks validation)
+        if _audit is not None:
+            try:
+                _username = None
+                _tenant = None
+                try:
+                    from flask import g as _g
+                    _username = getattr(_g, 'user', None)
+                    _tenant = getattr(_g, 'tenant', None)
+                except Exception:
+                    pass
+                _audit.log_event(
+                    'validation',
+                    username=_username,
+                    tenant=_tenant,
+                    dataset_hash=_audit.hash_dataframe(df),
+                    rules_applied=[r.name for r in self.rules],
+                    result_summary={
+                        'is_valid': result.is_valid,
+                        'total_issues': len(result.issues),
+                        'error_count': len(result.get_issues_by_severity('error')),
+                        'warning_count': len(result.get_issues_by_severity('warning')),
+                    },
+                )
+            except Exception:
+                pass
+
         return result
     
     def validate_dataframe(self, df: pd.DataFrame) -> ValidationResult:
