@@ -5,28 +5,32 @@ import tempfile
 import pytest
 import pandas as pd
 
-# Point the module at a throw-away DB for every test run
-_tmp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-_tmp_db.close()
-os.environ['AUDIT_DB_PATH'] = _tmp_db.name
-
-
 import medical_data_validator.audit as audit
 
 
 @pytest.fixture(autouse=True)
-def _reset_audit_conn():
-    """Close the module-level connection and delete the DB file between tests."""
-    yield
+def _isolated_audit_db():
+    """Give each test its own fresh SQLite DB so validate() calls from other
+    test modules cannot bleed into the audit log assertions."""
+    tf = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    tf.close()
+
+    old_path = audit.AUDIT_DB_PATH
+    audit.AUDIT_DB_PATH = tf.name
     if audit._conn is not None:
         audit._conn.close()
         audit._conn = None
+
+    yield
+
+    if audit._conn is not None:
+        audit._conn.close()
+        audit._conn = None
+    audit.AUDIT_DB_PATH = old_path
     try:
-        os.unlink(_tmp_db.name)
+        os.unlink(tf.name)
     except FileNotFoundError:
         pass
-    # Recreate empty file so next test can open a fresh DB
-    open(_tmp_db.name, 'w').close()
 
 
 class TestLogEvent:

@@ -772,6 +772,47 @@ def api_remove_custom_rule(rule_name):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+def api_anonymize():
+    """Anonymize PHI/PII columns in uploaded data or JSON payload."""
+    try:
+        method = request.args.get('method', 'hipaa_safe_harbor')
+        if method not in ('hipaa_safe_harbor', 'hash', 'mask'):
+            return jsonify({'success': False, 'error': f"Unknown method '{method}'. Use hipaa_safe_harbor, hash, or mask."}), 400
+
+        if 'file' in request.files:
+            file = request.files['file']
+            if not file or file.filename == '':
+                return jsonify({'success': False, 'error': 'No file selected'}), 400
+            if file.filename.endswith('.csv'):
+                df = pd.read_csv(file)
+            elif file.filename.endswith(('.xlsx', '.xls')):
+                df = pd.read_excel(file)
+            else:
+                return jsonify({'success': False, 'error': 'Unsupported file format'}), 400
+            columns_raw = request.form.get('columns')
+        else:
+            payload = request.get_json(silent=True)
+            if payload is None:
+                return jsonify({'success': False, 'error': 'No data provided'}), 400
+            df = pd.DataFrame(payload.get('data', payload))
+            columns_raw = payload.get('columns')
+
+        columns = [c.strip() for c in columns_raw.split(',')] if isinstance(columns_raw, str) else columns_raw
+
+        validator = MedicalDataValidator(enable_compliance=False, enable_analytics=False, enable_monitoring=False)
+        anonymized_df = validator.anonymize(df, columns=columns, method=method)
+
+        return jsonify({
+            'success': True,
+            'method': method,
+            'columns_anonymized': columns or [],
+            'rows': len(anonymized_df),
+            'data': anonymized_df.to_dict(orient='records'),
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 def api_analytics():
     """Get advanced analytics for uploaded data."""
     try:
@@ -1050,6 +1091,11 @@ def create_api_blueprint():
     def api_remove_custom_rule_endpoint(rule_name):
         """Remove a custom compliance rule."""
         return api_remove_custom_rule(rule_name)
+
+    @api_bp.route('/anonymize', methods=['POST'])
+    def api_anonymize_endpoint():
+        """Anonymize PHI/PII columns."""
+        return api_anonymize()
 
     @api_bp.route('/analytics', methods=['POST'])
     def api_analytics_endpoint():

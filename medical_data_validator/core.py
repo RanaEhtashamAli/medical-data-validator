@@ -19,6 +19,7 @@ try:
     from .analytics import AdvancedAnalytics
     from .monitoring import monitor
     from . import audit as _audit
+    from .security import DataAnonymizer
 except ImportError as _v12_import_error:
     warnings.warn(
         f"One or more v1.2 feature modules could not be imported "
@@ -32,6 +33,7 @@ except ImportError as _v12_import_error:
     AdvancedAnalytics = None
     monitor = None
     _audit = None
+    DataAnonymizer = None
 
 
 @dataclass
@@ -343,6 +345,75 @@ class MedicalDataValidator:
 
         return result
     
+    def anonymize(
+        self,
+        data: Union[pd.DataFrame, Dict[str, List], List[Dict]],
+        columns: Optional[List[str]] = None,
+        method: str = "hipaa_safe_harbor",
+    ) -> pd.DataFrame:
+        """
+        Anonymize PHI/PII columns in the dataset.
+
+        Args:
+            data: Input data (DataFrame, dict-of-lists, or list-of-dicts).
+            columns: Columns to anonymize. When None, all columns whose names
+                     match common PHI patterns are anonymized automatically.
+            method: One of 'hipaa_safe_harbor' (default), 'hash', or 'mask'.
+
+        Returns:
+            A new DataFrame with the specified columns anonymized.
+        """
+        if DataAnonymizer is None:
+            raise RuntimeError(
+                "DataAnonymizer is not available. "
+                "Ensure the security module imported correctly."
+            )
+
+        if isinstance(data, dict):
+            df = pd.DataFrame(data)
+        elif isinstance(data, list):
+            df = pd.DataFrame(data)
+        elif isinstance(data, pd.DataFrame):
+            df = data
+        else:
+            raise ValueError("data must be a pandas DataFrame, dict, or list")
+
+        if columns is None:
+            phi_keywords = {
+                'name', 'first', 'last', 'ssn', 'email', 'phone', 'fax',
+                'address', 'street', 'city', 'state', 'zip', 'birth', 'dob',
+                'admission', 'discharge', 'mrn', 'account', 'id',
+            }
+            columns = [
+                col for col in df.columns
+                if any(kw in col.lower() for kw in phi_keywords)
+            ]
+
+        anonymizer = DataAnonymizer(method=method)
+        result_df = anonymizer.anonymize_dataset(df, columns)
+
+        if _audit is not None:
+            try:
+                _username = None
+                _tenant = None
+                try:
+                    from flask import g as _g
+                    _username = getattr(_g, 'user', None)
+                    _tenant = getattr(_g, 'tenant', None)
+                except Exception:
+                    pass
+                _audit.log_event(
+                    'anonymization',
+                    username=_username,
+                    tenant=_tenant,
+                    dataset_hash=_audit.hash_dataframe(df),
+                    extra={'method': method, 'columns': columns},
+                )
+            except Exception:
+                pass
+
+        return result_df
+
     def validate_dataframe(self, df: pd.DataFrame) -> ValidationResult:
         """
         Validate a pandas DataFrame (alias for validate method).
