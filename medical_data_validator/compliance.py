@@ -8,6 +8,8 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 import numpy as np
 
+from .utils import PHI_PATTERNS, convert_numpy_types
+
 @dataclass
 class ComplianceViolation:
     """Represents a compliance violation."""
@@ -41,14 +43,15 @@ class ComplianceEngine:
     """Advanced compliance validation engine for medical data."""
     
     def __init__(self):
+        # Use the canonical shared PHI_PATTERNS so all checkers agree on definitions
         self.hipaa_patterns = {
-            'names': r'\b[A-Z][a-z]+ [A-Z][a-z]+\b',
-            'ssn': r'\d{3}-\d{2}-\d{4}',
-            'email': r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
-            'phone': r'\(\d{3}\)\s*\d{3}-\d{4}'
+            'names': PHI_PATTERNS['names'],
+            'ssn': PHI_PATTERNS['ssn'],
+            'email': PHI_PATTERNS['email'],
+            'phone': PHI_PATTERNS['phone'],
         }
         self.custom_rules = []
-        self.template_applied = None  # Add template_applied attribute
+        self.template_applied = None
     
     def add_custom_rule(self, rule: CustomComplianceRule) -> None:
         """Add a custom compliance rule."""
@@ -121,28 +124,34 @@ class ComplianceEngine:
         }
         for column in df.columns:
             column_data = df[column].astype(str)
-            # Personal data
-            for pattern in gdpr_patterns['personal']:
-                if column_data.str.contains(pattern, regex=True, na=False).any():
-                    gdpr_violations.append(ComplianceViolation(
-                        standard='GDPR',
-                        rule_id='PERSONAL_DATA_DETECTED',
-                        severity='high',
-                        field=column,
-                        message=f"Personal data detected in column '{column}'",
-                        recommendation="Ensure lawful basis for processing"
-                    ))
-            # Sensitive data
-            for pattern in gdpr_patterns['sensitive']:
-                if column_data.str.contains(pattern, regex=True, na=False).any():
-                    gdpr_violations.append(ComplianceViolation(
-                        standard='GDPR',
-                        rule_id='SENSITIVE_DATA_DETECTED',
-                        severity='critical',
-                        field=column,
-                        message=f"Sensitive data detected in column '{column}'",
-                        recommendation="Explicit consent required for processing"
-                    ))
+            # Personal data — one violation per column regardless of how many patterns match
+            personal_match = any(
+                column_data.str.contains(pattern, regex=True, na=False).any()
+                for pattern in gdpr_patterns['personal']
+            )
+            if personal_match:
+                gdpr_violations.append(ComplianceViolation(
+                    standard='GDPR',
+                    rule_id='PERSONAL_DATA_DETECTED',
+                    severity='high',
+                    field=column,
+                    message=f"Personal data detected in column '{column}'",
+                    recommendation="Ensure lawful basis for processing"
+                ))
+            # Sensitive data — one violation per column
+            sensitive_match = any(
+                column_data.str.contains(pattern, regex=True, na=False).any()
+                for pattern in gdpr_patterns['sensitive']
+            )
+            if sensitive_match:
+                gdpr_violations.append(ComplianceViolation(
+                    standard='GDPR',
+                    rule_id='SENSITIVE_DATA_DETECTED',
+                    severity='critical',
+                    field=column,
+                    message=f"Sensitive data detected in column '{column}'",
+                    recommendation="Explicit consent required for processing"
+                ))
         gdpr_score = max(0, 100 - (len(gdpr_violations) * 10))
         gdpr_risk = 'low' if gdpr_score >= 90 else 'medium' if gdpr_score >= 70 else 'high' if gdpr_score >= 50 else 'critical'
         gdpr_recommendations = []
@@ -242,20 +251,6 @@ class ComplianceEngine:
         scores = [hipaa_score, gdpr_score, fda_score, icd10_score, loinc_score, cpt_score]
         overall_score = sum(scores) / len(scores)
         overall_risk = 'low' if overall_score >= 90 else 'medium' if overall_score >= 70 else 'high' if overall_score >= 50 else 'critical'
-        
-        # Convert all numpy types to native Python types
-        def convert_numpy_types(obj):
-            if isinstance(obj, np.integer):
-                return int(obj)
-            elif isinstance(obj, np.floating):
-                return float(obj)
-            elif isinstance(obj, np.ndarray):
-                return obj.tolist()
-            elif isinstance(obj, dict):
-                return {k: convert_numpy_types(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [convert_numpy_types(item) for item in obj]
-            return obj
         
         # Convert ComplianceViolation objects to dictionaries
         def violation_to_dict(violation):

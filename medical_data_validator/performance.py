@@ -5,11 +5,14 @@ This module provides caching, batch processing, and performance monitoring
 for large-scale medical data validation.
 """
 
+import copy
 import time
+from collections import OrderedDict
 from functools import lru_cache
 from typing import Any, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
 import pandas as pd
 from .core import ValidationRule, ValidationIssue, ValidationResult
+from .utils import dataframe_fingerprint
 
 if TYPE_CHECKING:
     from .core import MedicalDataValidator
@@ -17,71 +20,55 @@ if TYPE_CHECKING:
 
 class ValidationCache:
     """
-    Cache for validation results to avoid re-computing identical validations.
-    
-    This is useful for repeated validations on the same data or when
-    validating large datasets in chunks.
+    LRU cache for validation results to avoid re-computing identical validations.
+
+    Uses a deterministic hashlib-based fingerprint so cache keys are stable
+    across process restarts and multiple worker processes.
     """
-    
+
     def __init__(self, max_size: int = 1000):
         self.max_size = max_size
-        self._cache: Dict[str, ValidationResult] = {}
-        self._access_count: Dict[str, int] = {}
-    
-    def _generate_key(self, data_hash: str, rule_names: List[str]) -> str:
-        """Generate a cache key from data hash and rule names."""
-        return f"{data_hash}:{','.join(sorted(rule_names))}"
-    
-    def _get_data_hash(self, data: pd.DataFrame) -> str:
-        """Generate a hash for the data to use as cache key."""
-        # Use a combination of shape, column names, and first few rows
-        shape_hash = hash((data.shape[0], data.shape[1]))
-        columns_hash = hash(tuple(sorted(data.columns)))
-        sample_hash = hash(str(data.head(10).to_dict()))
-        return f"{shape_hash}_{columns_hash}_{sample_hash}"
-    
+        # OrderedDict gives O(1) LRU tracking: move_to_end on hit, popitem(last=False) on evict
+        self._cache: OrderedDict[str, ValidationResult] = OrderedDict()
+        self._hits = 0
+        self._misses = 0
+
+    def _make_key(self, data: pd.DataFrame, rule_names: List[str]) -> str:
+        fp = dataframe_fingerprint(data)
+        rules_part = ",".join(sorted(rule_names))
+        return f"{fp}:{rules_part}"
+
     def get(self, data: pd.DataFrame, rule_names: List[str]) -> Optional[ValidationResult]:
-        """Get cached validation result if available."""
-        data_hash = self._get_data_hash(data)
-        key = self._generate_key(data_hash, rule_names)
-        
+        key = self._make_key(data, rule_names)
         if key in self._cache:
-            self._access_count[key] += 1
+            self._cache.move_to_end(key)
+            self._hits += 1
             return self._cache[key]
-        
+        self._misses += 1
         return None
-    
+
     def set(self, data: pd.DataFrame, rule_names: List[str], result: ValidationResult) -> None:
-        """Cache a validation result."""
-        data_hash = self._get_data_hash(data)
-        key = self._generate_key(data_hash, rule_names)
-        
-        # Implement LRU eviction if cache is full
-        if len(self._cache) >= self.max_size:
-            # Remove least recently used item
-            lru_key = min(self._access_count.keys(), key=lambda k: self._access_count[k])
-            del self._cache[lru_key]
-            del self._access_count[lru_key]
-        
-        self._cache[key] = result
-        self._access_count[key] = 1
-    
+        key = self._make_key(data, rule_names)
+        if key in self._cache:
+            self._cache.move_to_end(key)
+        else:
+            if len(self._cache) >= self.max_size:
+                self._cache.popitem(last=False)  # evict least-recently used
+            self._cache[key] = result
+
     def clear(self) -> None:
-        """Clear the cache."""
         self._cache.clear()
-        self._access_count.clear()
-    
+        self._hits = 0
+        self._misses = 0
+
     def stats(self) -> Dict[str, Any]:
-        """Get cache statistics."""
+        total = self._hits + self._misses
         return {
             "size": len(self._cache),
             "max_size": self.max_size,
-            "hit_rate": sum(self._access_count.values()) / max(len(self._access_count), 1),
-            "most_accessed": sorted(
-                self._access_count.items(), 
-                key=lambda x: x[1], 
-                reverse=True
-            )[:5]
+            "hits": self._hits,
+            "misses": self._misses,
+            "hit_rate": self._hits / total if total else 0.0,
         }
 
 
@@ -143,20 +130,28 @@ class BatchValidator:
             cached_result = self.cache.get(batch_data, rule_names)
             
             if cached_result:
-                batch_result = cached_result
+                # Deep-copy so row-offset mutations don't corrupt the cached object
+                batch_result = copy.deepcopy(cached_result)
             else:
                 # Run validation on batch
                 batch_result = self.validator.validate(batch_data)
                 # Cache the result
                 self.cache.set(batch_data, rule_names, batch_result)
-            
+
             # Combine results
             for issue in batch_result.issues:
-                # Adjust row numbers to reflect global position
                 if issue.row is not None:
                     issue.row += start_idx
                 combined_result.add_issue(issue)
-            
+
+            # Merge compliance_report from the last batch that produced one so
+            # the monitoring system always sees a compliance summary.
+            batch_summary = getattr(batch_result, 'summary', {}) or {}
+            if 'compliance_report' in batch_summary:
+                combined_result.summary['compliance_report'] = batch_summary['compliance_report']
+            if 'analytics_report' in batch_summary:
+                combined_result.summary['analytics_report'] = batch_summary['analytics_report']
+
             # Update summary
             combined_result.summary["batch_results"].append({
                 "batch_num": batch_num,
@@ -165,11 +160,11 @@ class BatchValidator:
                 "issues_count": len(batch_result.issues),
                 "is_valid": batch_result.is_valid
             })
-            
+
             # Progress callback
             if progress_callback:
                 progress_callback(batch_num + 1, total_batches)
-        
+
         return combined_result
 
 

@@ -5,19 +5,27 @@ This module provides the main MedicalDataValidator class and supporting
 data structures for validating healthcare datasets.
 """
 
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 import pandas as pd
 from pydantic import BaseModel
 
-# Import compliance engine for v1.2
+# Import v1.2 feature modules — fail gracefully but loudly so operators know
 try:
     from .compliance import ComplianceEngine
     from .compliance_templates import template_manager
     from .analytics import AdvancedAnalytics
     from .monitoring import monitor
-except ImportError:
+except ImportError as _v12_import_error:
+    warnings.warn(
+        f"One or more v1.2 feature modules could not be imported "
+        f"({_v12_import_error}). Compliance validation, analytics, and "
+        f"real-time monitoring will be disabled for this session.",
+        ImportWarning,
+        stacklevel=2,
+    )
     ComplianceEngine = None
     template_manager = None
     AdvancedAnalytics = None
@@ -146,10 +154,22 @@ class MedicalDataValidator:
             self.analytics_engine = AdvancedAnalytics()
         else:
             self.analytics_engine = None
-        
-        # Start monitoring if enabled
+
+        # Monitoring is started lazily via start_monitoring() so that importing
+        # the package and constructing a validator in tests/scripts doesn't
+        # automatically spin up a background thread.
         if enable_monitoring and monitor is not None:
             monitor.start_monitoring()
+
+    def start_monitoring(self) -> None:
+        """Explicitly start the background monitoring thread (idempotent)."""
+        if self.enable_monitoring and monitor is not None:
+            monitor.start_monitoring()
+
+    def stop_monitoring(self) -> None:
+        """Stop the background monitoring thread."""
+        if monitor is not None:
+            monitor.stop_monitoring()
     
     def add_rule(self, rule: ValidationRule) -> None:
         """Add a validation rule to the validator."""

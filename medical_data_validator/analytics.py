@@ -111,7 +111,10 @@ class AdvancedAnalytics:
             current_date = pd.Timestamp.now()
             for col in date_columns:
                 if df[col].dtype == 'datetime64[ns]':
-                    days_old = (current_date - df[col].max()).days
+                    max_date = df[col].max()
+                    if pd.isna(max_date):
+                        continue
+                    days_old = (current_date - max_date).days
                     timeliness = max(0, 1 - (days_old / 365))  # Decay over a year
                     break
         
@@ -215,8 +218,8 @@ class AdvancedAnalytics:
                 continue
             
             # Simple linear trend calculation
-            slope = np.polyfit(x[:len(y)], y, 1)[0]
-            
+            slope, intercept = np.polyfit(x[:len(y)], y, 1)
+
             # Determine trend direction
             if slope > 0.01:
                 trend = "increasing"
@@ -224,9 +227,9 @@ class AdvancedAnalytics:
                 trend = "decreasing"
             else:
                 trend = "stable"
-            
-            # Calculate confidence (R-squared)
-            y_pred = np.polyval([slope, np.mean(y)], x[:len(y)])
+
+            # Calculate confidence (R-squared) using the fitted intercept
+            y_pred = np.polyval([slope, intercept], x[:len(y)])
             ss_res = np.sum((y - y_pred) ** 2)
             ss_tot = np.sum((y - np.mean(y)) ** 2)
             confidence = 1 - (ss_res / ss_tot) if ss_tot != 0 else 0
@@ -341,20 +344,8 @@ class AdvancedAnalytics:
     
     def _serialize_statistical_summary(self, df: pd.DataFrame) -> Dict[str, Any]:
         """Generate serializable statistical summary."""
+        from .utils import convert_numpy_types
         summary = self.generate_statistical_summary(df)
-        
-        # Convert numpy types to native Python types
-        def convert_numpy_types(obj):
-            if hasattr(obj, 'item'):
-                return obj.item()
-            elif isinstance(obj, dict):
-                # Convert all keys to str for JSON serialization
-                return {str(k): convert_numpy_types(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [convert_numpy_types(v) for v in obj]
-            else:
-                return obj
-        
         return convert_numpy_types(summary)
     
     def _calculate_overall_quality_score(self, df: pd.DataFrame) -> float:

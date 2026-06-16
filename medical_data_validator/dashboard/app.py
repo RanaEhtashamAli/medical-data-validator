@@ -10,6 +10,7 @@ if __name__ == "__main__":
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     sys.path.insert(0, project_root)
 
+import secrets
 from flask import Flask, jsonify
 import dash
 import dash_bootstrap_components as dbc
@@ -26,7 +27,15 @@ except ImportError:
 
 def create_dashboard_app():
     app = Flask(__name__)
-    app.config['SECRET_KEY'] = 'dev-secret-key'
+    secret_key = os.environ.get('SECRET_KEY')
+    if not secret_key:
+        if os.environ.get('FLASK_ENV') == 'production':
+            raise RuntimeError(
+                "SECRET_KEY environment variable must be set in production. "
+                "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+            )
+        secret_key = secrets.token_hex(32)
+    app.config['SECRET_KEY'] = secret_key
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
     # Register Flask routes

@@ -160,12 +160,19 @@ class RealTimeMonitor:
                         }
                     )
     
+    def _has_active_alert(self, alert_type: str) -> bool:
+        """Return True if an unresolved alert of this type already exists."""
+        return any(
+            a.alert_type == alert_type and not a.resolved
+            for a in self.alerts
+        )
+
     def _check_anomalies(self, result: Dict[str, Any]) -> None:
         """Check for anomalies in validation results."""
         try:
-            # Check for high failure rate
+            # Check for high failure rate — only create one alert until it resolves
             failure_rate = self.stats.failed_validations / max(1, self.stats.total_validations)
-            if failure_rate > 0.3:  # 30% failure rate
+            if failure_rate > 0.3 and not self._has_active_alert('anomaly_detected'):
                 self._create_alert(
                     alert_type='anomaly_detected',
                     severity='high',
@@ -176,18 +183,27 @@ class RealTimeMonitor:
                         'failed_validations': self.stats.failed_validations
                     }
                 )
-            
-            # Check for critical compliance violations
-            compliance_report = result.get('compliance_report', {})
+
+            # Check for critical compliance violations.
+            # When called via record_validation_result the dict comes from to_dict(),
+            # where compliance_report is nested under 'summary'. Support both paths.
+            compliance_report = (
+                result.get('summary', {}).get('compliance_report')
+                or result.get('compliance_report', {})
+            )
             if compliance_report:
                 # Handle both old and new compliance report structures
                 if 'standards' in compliance_report:
-                    # New v1.2 structure
+                    # New v1.2 structure — medical_coding has no violations list, skip it
                     standards = compliance_report['standards']
                     all_violations = []
                     for standard_name, standard_data in standards.items():
+                        if standard_name == 'medical_coding':
+                            continue
                         violations = standard_data.get('violations', [])
                         all_violations.extend(violations)
+                    # Also include the flat all_violations list which covers medical_coding
+                    all_violations = compliance_report.get('all_violations', all_violations)
                 else:
                     # Old structure
                     all_violations = compliance_report.get('all_violations', [])
@@ -326,9 +342,10 @@ class RealTimeMonitor:
         """Main monitoring loop."""
         while self.monitoring_active:
             try:
-                # Check for stale data (no validations in last hour)
-                if (self.stats.last_validation_time and 
-                    datetime.now() - self.stats.last_validation_time > timedelta(hours=1)):
+                # Check for stale data — only fire once per inactive period
+                if (self.stats.last_validation_time and
+                        datetime.now() - self.stats.last_validation_time > timedelta(hours=1) and
+                        not self._has_active_alert('system_error')):
                     self._create_alert(
                         alert_type='system_error',
                         severity='medium',

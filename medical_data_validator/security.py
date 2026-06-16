@@ -14,26 +14,13 @@ from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 
+from .utils import PHI_PATTERNS, convert_numpy_types
+
 class HIPAAComplianceChecker:
     """HIPAA compliance checker for medical data."""
-    
+
     def __init__(self):
-        self.phi_patterns = {
-            'ssn': r'\b\d{3}-\d{2}-\d{4}\b|\b\d{9}\b',
-            'email': r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
-            'phone': r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b',
-            'date': r'\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b',
-            'address': r'\b\d+\s+[A-Za-z\s]+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr)\b',
-            'medical_record': r'\bMRN\s*\d+\b|\bMedical\s*Record\s*\d+\b',
-            'account_number': r'\bAccount\s*#?\s*\d+\b|\bAcct\s*#?\s*\d+\b',
-            'insurance_id': r'\bInsurance\s*ID\s*\d+\b|\bPolicy\s*#\s*\d+\b',
-            'license_number': r'\bLicense\s*#\s*\d+\b|\bLic\s*#\s*\d+\b',
-            'vehicle_id': r'\bVIN\s*\d+\b|\bVehicle\s*ID\s*\d+\b',
-            'device_id': r'\bDevice\s*ID\s*\d+\b|\bSerial\s*#\s*\d+\b',
-            'ip_address': r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b',
-            'url': r'\bhttps?://[^\s]+\b',
-            'biometric': r'\bFingerprint|Retina|Iris|Voice\s*Pattern\b'
-        }
+        self.phi_patterns = PHI_PATTERNS
         
         self.hipaa_safe_harbor_fields = {
             'names': ['first_name', 'last_name', 'full_name', 'patient_name'],
@@ -360,28 +347,22 @@ class DataSanitizer:
     
     def __init__(self):
         self.dangerous_patterns = [
-            r'<script.*?</script>',  # XSS
-            r'javascript:',  # JavaScript injection
-            r'<iframe.*?</iframe>',  # IFrame injection
-            r'<object.*?</object>',  # Object injection
-            r'<embed.*?</embed>',  # Embed injection
-            r'<form.*?</form>',  # Form injection
-            r'<input.*?>',  # Input injection
-            r'<textarea.*?</textarea>',  # Textarea injection
-            r'<select.*?</select>',  # Select injection
-            r'<button.*?</button>',  # Button injection
-            r'<link.*?>',  # Link injection
-            r'<meta.*?>',  # Meta injection
-            r'<style.*?</style>',  # Style injection
-            r'<title.*?</title>',  # Title injection
-            r'<base.*?>',  # Base injection
-            r'<bgsound.*?>',  # BGSound injection
-            r'<link.*?>',  # Link injection
-            r'<meta.*?>',  # Meta injection
-            r'<style.*?</style>',  # Style injection
-            r'<title.*?</title>',  # Title injection
-            r'<base.*?>',  # Base injection
-            r'<bgsound.*?>',  # BGSound injection
+            r'<script.*?</script>',
+            r'javascript:',
+            r'<iframe.*?</iframe>',
+            r'<object.*?</object>',
+            r'<embed.*?</embed>',
+            r'<form.*?</form>',
+            r'<input.*?>',
+            r'<textarea.*?</textarea>',
+            r'<select.*?</select>',
+            r'<button.*?</button>',
+            r'<link.*?>',
+            r'<meta.*?>',
+            r'<style.*?</style>',
+            r'<title.*?</title>',
+            r'<base.*?>',
+            r'<bgsound.*?>',
         ]
     
     def sanitize_data(self, data: pd.DataFrame) -> pd.DataFrame:
@@ -401,9 +382,9 @@ class DataSanitizer:
         
         value_str = str(value)
         
-        # Remove dangerous patterns
+        # Remove dangerous patterns (re.DOTALL so multi-line tags are matched)
         for pattern in self.dangerous_patterns:
-            value_str = re.sub(pattern, '', value_str, flags=re.IGNORECASE)
+            value_str = re.sub(pattern, '', value_str, flags=re.IGNORECASE | re.DOTALL)
         
         # Remove HTML tags
         value_str = re.sub(r'<[^>]+>', '', value_str)

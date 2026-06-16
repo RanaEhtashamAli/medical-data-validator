@@ -28,10 +28,9 @@ class TestValidationCache:
     def test_cache_creation(self):
         """Test creating a validation cache."""
         cache = ValidationCache(max_size=500)
-        
+
         assert cache.max_size == 500
         assert len(cache._cache) == 0
-        assert len(cache._access_count) == 0
     
     def test_cache_get_set(self):
         """Test basic cache get and set operations."""
@@ -50,19 +49,17 @@ class TestValidationCache:
         assert cached_result == result
     
     def test_cache_key_generation(self):
-        """Test cache key generation."""
+        """Test that identical DataFrames get the same cache key and different ones differ."""
         cache = ValidationCache()
         df1 = pd.DataFrame({"col1": [1, 2, 3]})
         df2 = pd.DataFrame({"col1": [1, 2, 3]})  # Same data
         df3 = pd.DataFrame({"col1": [4, 5, 6]})  # Different data
-        
-        # Same data should generate same key
-        key1 = cache._generate_key(cache._get_data_hash(df1), ["rule1"])
-        key2 = cache._generate_key(cache._get_data_hash(df2), ["rule1"])
+
+        key1 = cache._make_key(df1, ["rule1"])
+        key2 = cache._make_key(df2, ["rule1"])
         assert key1 == key2
-        
-        # Different data should generate different key
-        key3 = cache._generate_key(cache._get_data_hash(df3), ["rule1"])
+
+        key3 = cache._make_key(df3, ["rule1"])
         assert key1 != key3
     
     def test_cache_lru_eviction(self):
@@ -104,7 +101,6 @@ class TestValidationCache:
         
         cache.clear()
         assert len(cache._cache) == 0
-        assert len(cache._access_count) == 0
     
     def test_cache_stats(self):
         """Test cache statistics."""
@@ -117,11 +113,12 @@ class TestValidationCache:
         cache.get(df, ["rule1"])  # Access again
         
         stats = cache.stats()
-        
+
         assert stats["size"] == 1
         assert stats["max_size"] == 100
-        assert stats["hit_rate"] == 3  # 1 set + 2 gets
-        assert len(stats["most_accessed"]) == 1
+        assert stats["hits"] == 2
+        assert stats["misses"] == 0
+        assert stats["hit_rate"] == 1.0
 
 
 class TestBatchValidator:
