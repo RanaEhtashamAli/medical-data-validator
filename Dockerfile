@@ -1,46 +1,63 @@
-# Medical Data Validator - Production Docker Image
-FROM python:3.11-slim
+# ── Stage 1: builder ──────────────────────────────────────────────────────────
+FROM python:3.11-slim AS builder
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV DEBIAN_FRONTEND=noninteractive
-ENV PORT=8000
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    curl \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc g++ curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Create app directory
-WORKDIR /app
+WORKDIR /build
 
-# Copy pyproject.toml and package files first for better caching
+# Copy only dependency manifests first — leverages layer cache
 COPY pyproject.toml .
 COPY medical_data_validator/ ./medical_data_validator/
 
-# Install the package with all web dependencies
-RUN pip install --no-cache-dir -e ".[web-all]"
+# Install the package with all extras into an isolated prefix
+RUN pip install --prefix=/install -e ".[all]"
 
-# Copy the rest of the application code
-COPY . .
 
-# Create compliance templates directory and ensure it exists
-RUN mkdir -p /app/compliance_templates
+# ── Stage 2: runtime ──────────────────────────────────────────────────────────
+FROM python:3.11-slim AS runtime
 
-# Create non-root user for security
-RUN useradd --create-home --shell /bin/bash app \
-    && chown -R app:app /app
-USER app
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app \
+    PORT=8000 \
+    FLASK_ENV=production \
+    # Audit + job store location inside the container
+    AUDIT_DB_DIR=/data \
+    JOBS_DB_DIR=/data \
+    REGISTRY_DB_PATH=/data/registry.db
 
-# Expose port (Railway will override this)
+# Runtime system deps only
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy installed Python packages from builder
+COPY --from=builder /install /usr/local
+
+WORKDIR /app
+
+# Copy application code
+COPY --from=builder /build/medical_data_validator ./medical_data_validator
+COPY pyproject.toml wsgi.py api.py launch_dashboard.py ./
+
+# Persistent data directory (mount a volume here in production)
+RUN mkdir -p /data && chmod 777 /data
+
+# Non-root user
+RUN useradd --create-home --shell /bin/bash --uid 1001 appuser \
+    && chown -R appuser:appuser /app /data
+USER appuser
+
 EXPOSE $PORT
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:$PORT/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -sf http://localhost:${PORT}/api/health || exit 1
 
-# Default command for Railway
-CMD gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120 
+# Default: run the gunicorn API server
+CMD ["sh", "-c", "gunicorn wsgi:app --bind 0.0.0.0:${PORT} --workers ${GUNICORN_WORKERS:-2} --threads ${GUNICORN_THREADS:-4} --timeout 120 --access-logfile - --error-logfile -"]
