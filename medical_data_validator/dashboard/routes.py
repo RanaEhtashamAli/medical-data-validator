@@ -1202,6 +1202,18 @@ def register_routes(app):
     if register_job_routes:
         register_job_routes(app)
 
+    # Report export routes (/api/report/*)
+    try:
+        from medical_data_validator.reports import register_report_routes
+    except ImportError:
+        try:
+            from ..reports import register_report_routes
+        except ImportError:
+            register_report_routes = None
+
+    if register_report_routes:
+        register_report_routes(app)
+
     # Create and register API Blueprint
     api_bp = create_api_blueprint()
     app.register_blueprint(api_bp)
