@@ -1190,6 +1190,18 @@ def register_routes(app):
     if register_registry_routes:
         register_registry_routes(app)
 
+    # Job queue routes (/api/jobs)
+    try:
+        from medical_data_validator.jobs import register_job_routes
+    except ImportError:
+        try:
+            from ..jobs import register_job_routes
+        except ImportError:
+            register_job_routes = None
+
+    if register_job_routes:
+        register_job_routes(app)
+
     # Create and register API Blueprint
     api_bp = create_api_blueprint()
     app.register_blueprint(api_bp)
