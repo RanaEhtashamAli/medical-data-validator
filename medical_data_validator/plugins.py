@@ -1,20 +1,25 @@
 """
-Built-in ComplianceStandard plugins (Phase 3e).
+Built-in ComplianceStandard plugins and plugin-discovery SDK (Phase 3e/3f).
 
-Provides two ready-to-use plugins that can be registered with ComplianceEngine:
+Provides two ready-to-use plugins and a discovery mechanism that loads any
+third-party plugins registered under the 'medical_data_validator.compliance_plugins'
+setuptools entry-point group.
 
-  FHIRCompliancePlugin  — structural FHIR R4 checks
-  SNOMEDCompliancePlugin — SNOMED CT code-format checks
-
-Usage:
+Usage — built-in plugins:
     from medical_data_validator.compliance import ComplianceEngine
     from medical_data_validator.plugins import FHIRCompliancePlugin, SNOMEDCompliancePlugin
 
     engine = ComplianceEngine()
     engine.register_plugin(FHIRCompliancePlugin())
     engine.register_plugin(SNOMEDCompliancePlugin())
-    report = engine.comprehensive_compliance_validation(df)
-    # report['standards']['fhir_r4']  and  report['standards']['snomed_ct']  are now present
+
+Usage — auto-discover all installed plugins:
+    from medical_data_validator.plugins import load_compliance_plugins
+    engine = load_compliance_plugins()          # returns a ComplianceEngine
+
+Usage — third-party plugin package (in its own pyproject.toml):
+    [project.entry-points."medical_data_validator.compliance_plugins"]
+    my_standard = "my_package.module:MyPlugin"
 """
 
 import re
@@ -190,3 +195,71 @@ class SNOMEDCompliancePlugin(ComplianceStandard):
                 ))
 
         return violations
+
+
+# ── Plugin discovery SDK ──────────────────────────────────────────────────────
+
+_ENTRY_POINT_GROUP = 'medical_data_validator.compliance_plugins'
+
+# Names of built-in plugins that ship with this package
+_BUILTIN_PLUGIN_NAMES = {'fhir_r4', 'snomed_ct'}
+
+
+def discover_plugins(include_builtin: bool = True) -> List[ComplianceStandard]:
+    """
+    Return all compliance plugins registered via the
+    ``medical_data_validator.compliance_plugins`` entry-point group.
+
+    Args:
+        include_builtin: When False, skip plugins whose names match the
+            built-in set ('fhir_r4', 'snomed_ct').  Useful for testing
+            third-party plugins in isolation.
+
+    Returns:
+        A list of instantiated ComplianceStandard objects, one per entry-point.
+        Entry-points that fail to load are silently skipped.
+    """
+    import importlib.metadata as importlib_metadata
+
+    plugins: List[ComplianceStandard] = []
+    try:
+        eps = importlib_metadata.entry_points(group=_ENTRY_POINT_GROUP)
+    except Exception:
+        return plugins
+
+    for ep in eps:
+        if not include_builtin and ep.name in _BUILTIN_PLUGIN_NAMES:
+            continue
+        try:
+            cls = ep.load()
+            plugin = cls()
+            plugins.append(plugin)
+        except Exception:
+            pass
+
+    return plugins
+
+
+def load_compliance_plugins(
+    engine=None,
+    include_builtin: bool = True,
+):
+    """
+    Discover all installed compliance plugins and register them with *engine*.
+
+    If *engine* is None, a new :class:`~medical_data_validator.compliance.ComplianceEngine`
+    is created and returned.
+
+    This is the recommended one-liner for getting a fully loaded engine:
+
+        engine = load_compliance_plugins()
+    """
+    from .compliance import ComplianceEngine
+
+    if engine is None:
+        engine = ComplianceEngine()
+
+    for plugin in discover_plugins(include_builtin=include_builtin):
+        engine.register_plugin(plugin)
+
+    return engine

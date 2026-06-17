@@ -1,10 +1,16 @@
-"""Tests for the pluggable compliance engine and built-in FHIR/SNOMED plugins (Phase 3e)."""
+"""Tests for the pluggable compliance engine, built-in FHIR/SNOMED plugins, and
+plugin discovery SDK (Phases 3e and 3f)."""
 
 import pytest
 import pandas as pd
 
 from medical_data_validator.compliance import ComplianceEngine, ComplianceStandard, ComplianceViolation
-from medical_data_validator.plugins import FHIRCompliancePlugin, SNOMEDCompliancePlugin
+from medical_data_validator.plugins import (
+    FHIRCompliancePlugin,
+    SNOMEDCompliancePlugin,
+    discover_plugins,
+    load_compliance_plugins,
+)
 
 
 # ── ComplianceStandard ABC ────────────────────────────────────────────────────
@@ -145,6 +151,42 @@ class TestSNOMEDPlugin:
         df = pd.DataFrame({'snomedct': ['not-a-code']})
         violations = snomed.validate(df)
         assert violations[0].field == 'snomedct'
+
+
+# ── Plugin discovery SDK ──────────────────────────────────────────────────────
+
+class TestDiscoverPlugins:
+    def test_discover_returns_list(self):
+        plugins = discover_plugins()
+        assert isinstance(plugins, list)
+
+    def test_builtin_plugins_discovered(self):
+        plugins = discover_plugins(include_builtin=True)
+        names = {p.name for p in plugins}
+        assert 'fhir_r4' in names
+        assert 'snomed_ct' in names
+
+    def test_exclude_builtins(self):
+        plugins = discover_plugins(include_builtin=False)
+        names = {p.name for p in plugins}
+        assert 'fhir_r4' not in names
+        assert 'snomed_ct' not in names
+
+    def test_load_compliance_plugins_returns_engine(self):
+        engine = load_compliance_plugins()
+        from medical_data_validator.compliance import ComplianceEngine
+        assert isinstance(engine, ComplianceEngine)
+
+    def test_load_compliance_plugins_populates_engine(self):
+        engine = load_compliance_plugins()
+        assert 'fhir_r4' in engine.list_plugins()
+        assert 'snomed_ct' in engine.list_plugins()
+
+    def test_load_compliance_plugins_accepts_existing_engine(self):
+        existing = ComplianceEngine()
+        returned = load_compliance_plugins(engine=existing)
+        assert returned is existing
+        assert 'fhir_r4' in existing.list_plugins()
 
 
 # ── Integration: both plugins in engine ──────────────────────────────────────

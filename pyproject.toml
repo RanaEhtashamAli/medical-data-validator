@@ -176,6 +176,15 @@ medical-validator = "medical_data_validator_cli:main"
 [project.entry-points."console_scripts"]
 medical-validator = "medical_data_validator_cli:main"
 
+# Third-party compliance-standard plugins register here.
+# A plugin package adds an entry like:
+#   [project.entry-points."medical_data_validator.compliance_plugins"]
+#   my_standard = "my_package.module:MyPlugin"
+# and the engine will discover and instantiate it automatically.
+[project.entry-points."medical_data_validator.compliance_plugins"]
+fhir_r4 = "medical_data_validator.plugins:FHIRCompliancePlugin"
+snomed_ct = "medical_data_validator.plugins:SNOMEDCompliancePlugin"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["medical_data_validator*"]

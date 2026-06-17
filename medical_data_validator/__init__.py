@@ -47,11 +47,18 @@ from .performance import (
 
 try:
     from .compliance import ComplianceStandard
-    from .plugins import FHIRCompliancePlugin, SNOMEDCompliancePlugin
+    from .plugins import (
+        FHIRCompliancePlugin,
+        SNOMEDCompliancePlugin,
+        discover_plugins,
+        load_compliance_plugins,
+    )
 except ImportError:
     ComplianceStandard = None  # type: ignore
     FHIRCompliancePlugin = None  # type: ignore
     SNOMEDCompliancePlugin = None  # type: ignore
+    discover_plugins = None  # type: ignore
+    load_compliance_plugins = None  # type: ignore
 
 __all__ = [
     # Core classes
@@ -86,8 +93,10 @@ __all__ = [
     "timed_validation",
     "performance_monitor",
 
-    # Pluggable compliance standards
+    # Pluggable compliance standards & discovery SDK
     "ComplianceStandard",
     "FHIRCompliancePlugin",
     "SNOMEDCompliancePlugin",
+    "discover_plugins",
+    "load_compliance_plugins",
 ] 
