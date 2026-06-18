@@ -110,17 +110,19 @@ medical_data_validator/
 ```
 This is nested under `result['summary']['compliance_report']` in `ValidationResult.to_dict()`, not at the top level.
 
-### Known bugs (from code review)
+### Known bugs — status
 
-These are confirmed bugs to be aware of when working on the codebase:
+All bugs identified in the original code review have been fixed:
 
-- **`performance.py:154`** — `BatchValidator` mutates `issue.row` in-place on cached `ValidationResult` objects, corrupting cached row numbers on subsequent cache hits. Fix: `copy.deepcopy(cached_result)` before mutating.
-- **`monitoring.py:181`** — `_check_anomalies` calls `result.get('compliance_report', {})` but the key is nested at `result['summary']['compliance_report']` — compliance alerts never fire.
-- **`monitoring.py:188`** — The `medical_coding` standard dict has no top-level `violations` key, so ICD-10/LOINC/CPT violations are silently excluded from alerts.
-- **`monitoring.py:163` and `:330`** — Alert storm: failure-rate and stale-data alerts fire on every call/loop iteration with no deduplication.
-- **`analytics.py:229`** — R² confidence uses `np.mean(y)` as the intercept instead of the fitted intercept from `np.polyfit`, making trend confidence wrong.
-- **`analytics.py:114`** — `NaT.days` crashes when the first datetime column is all-null.
-- **`compliance.py:125`** — GDPR loop adds one violation per pattern match per column (up to 4×), inflating violation count.
-- **`security.py:406`** — Missing `re.DOTALL` — multi-line HTML injection bypasses `DataSanitizer`.
-- **`security.py:22`** — SSN pattern `\b\d{9}\b` matches any 9-digit number.
-- **`dashboard/app.py:9`** — `SECRET_KEY` is hardcoded as `'dev-secret-key'` with no env-var override.
+| Location | Bug | Fixed in |
+|---|---|---|
+| `performance.py:134` | `BatchValidator` mutated cached `issue.row` in-place | Phase 2 — `copy.deepcopy` |
+| `monitoring.py` | Compliance alerts never fired (wrong dict key) | Phase 2 |
+| `monitoring.py` | `medical_coding` violations silently excluded | Phase 2 |
+| `monitoring.py` | Alert storm — failure-rate, stale-data, quality-degradation, high-issues alerts fired on every call | Phase 2 + Phase 4a |
+| `analytics.py:229` | R² confidence used `np.mean(y)` instead of fitted intercept | Phase 2 |
+| `analytics.py:114` | `NaT.days` crash on all-null datetime column | Phase 2 |
+| `compliance.py:125` | GDPR loop added one violation per pattern match per column | Phase 2 |
+| `security.py:390` | Missing `re.DOTALL` — multi-line HTML injection bypassed sanitizer | Phase 4a |
+| `security.py` (utils.py) | SSN pattern `\b\d{9}\b` matched any 9-digit number | Phase 2 |
+| `dashboard/app.py:9` | `SECRET_KEY` hardcoded with no env-var override | Phase 2 |

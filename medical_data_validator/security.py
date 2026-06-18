@@ -387,7 +387,7 @@ class DataSanitizer:
             value_str = re.sub(pattern, '', value_str, flags=re.IGNORECASE | re.DOTALL)
         
         # Remove HTML tags
-        value_str = re.sub(r'<[^>]+>', '', value_str)
+        value_str = re.sub(r'<[^>]+>', '', value_str, flags=re.DOTALL)
         
         # Remove special characters that could be used for injection
         value_str = value_str.replace(';', '').replace('--', '').replace('/*', '').replace('*/', '')

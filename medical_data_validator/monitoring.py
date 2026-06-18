@@ -147,7 +147,7 @@ class RealTimeMonitor:
             if len(recent_values) >= 3:
                 trend = recent_values[-1] - recent_values[0]
                 
-                if trend < -0.1:  # 10% decline
+                if trend < -0.1 and not self._has_active_alert('quality_degradation'):
                     self._create_alert(
                         alert_type='quality_degradation',
                         severity='medium' if trend > -0.2 else 'high',
@@ -235,7 +235,7 @@ class RealTimeMonitor:
             
             # Check validation failure rate
             total_issues = len(result.get('issues', []))
-            if total_issues > 10:
+            if total_issues > 10 and not self._has_active_alert('anomaly_detected'):
                 self._create_alert(
                     alert_type='anomaly_detected',
                     severity='high',

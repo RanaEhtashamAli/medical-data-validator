@@ -65,7 +65,10 @@ class SchemaValidator(ValidationRule):
             "int64": ["int", "integer", "int64"],
             "float64": ["float", "float64", "number"],
             "object": ["string", "str", "object", "text"],
+            "str": ["string", "str", "object", "text"],  # pandas 2.x dtype name
+            "string": ["string", "str", "object", "text"],
             "datetime64[ns]": ["datetime", "date", "timestamp"],
+            "datetime64[us]": ["datetime", "date", "timestamp"],  # pandas 2.x ns→us
             "bool": ["boolean", "bool"],
         }
         
@@ -115,8 +118,8 @@ class PHIDetector(ValidationRule):
                     )
                 )
             
-            # Check for PHI patterns in data
-            if data[column].dtype == "object":
+            # Check for PHI patterns in data (handle both pandas 1.x 'object' and 2.x 'str' dtypes)
+            if pd.api.types.is_object_dtype(data[column]) or pd.api.types.is_string_dtype(data[column]):
                 column_series = data[column]
                 if isinstance(column_series, pd.Series):
                     phi_found = self._check_phi_patterns(column_series, column)

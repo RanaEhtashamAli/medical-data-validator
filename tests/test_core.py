@@ -445,7 +445,7 @@ class TestSchemaValidator:
         
         assert len(issues) == 1
         assert issues[0].severity == "error"
-        assert "has type 'object' but expected 'int'" in issues[0].message
+        assert "but expected 'int'" in issues[0].message
     
     def test_valid_schema(self):
         """Test validation with valid schema."""
