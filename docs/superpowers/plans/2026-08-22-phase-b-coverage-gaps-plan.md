@@ -2607,3 +2607,749 @@ git push origin master
 **Type/interface consistency:** `validators_config` dict shape is identical across Task 1 (API) and Task 2 (CLI) — both produce/consume `required_columns`, `column_types`, `ranges`, `date_columns`, `min_date`, `max_date`, `code_columns`. `_run_validation_for_upload`'s return arity change (5 → 6 values, adding the result dict) is applied consistently across its Task 6 definition, Task 8's modification, and both call sites (the Dash callback and `tests/test_dash_layout.py`). `DASH_TENANT = 'default'` is used consistently across all 4 pages that need a tenant scope (registry, jobs, audit — auth has no tenant-scoping concept for its own CRUD).
 
 **Corrections made during plan-writing (not left in the spec uncorrected):** the spec's illustrative JSON example for Section A used an envelope shape (`{"data": ..., "validators": ...}`) that doesn't match `/api/validate/data`'s real envelope-less wire format — the plan uses query/form parameters instead, documented in Global Constraints. The spec's Non-goals section assumed uploads are never persisted to disk; `api_validate_file` actually does save to a `NamedTemporaryFile`, so Task 3's `dataframe_from_request()` passes the real temp path to `SecurityAuditor` when available, giving its file-permission check genuine signal instead of always degrading to "no issues found."
+
+---
+
+## Phase B.1 Addendum: Complete the deferred Dash admin CRUD gaps
+
+**Context:** Task 12's final whole-branch review (finding I2) found that Tasks 7, 8, 9, and 10 shipped list+create only for their respective pages, even though the design spec's Section D enumerated fuller CRUD (`get_dataset`/`update_dataset`/`delete_dataset` for Registry, `get_job` for Jobs, `count_log` for Audit, remove for Custom Rules) and report-download buttons on the Jobs page in addition to Validate. This was ruled a plan-vs-spec scope gap at the time (not a defect in what was built) and parked. The user has since asked for these gaps to be closed. This addendum adds 4 tasks (13-16) using the exact same pattern established by Tasks 6-11: pure, directly-testable helper functions; a single `@callback` per page keyed on `dash.ctx.triggered_id`; `register_page_once` for page registration (already in place, unaffected by these tasks).
+
+**UI convention for the new actions (approved by the user):** an ID/name lookup `Input` field next to dedicated action buttons (View/Update/Delete/Remove), matching the existing create-form convention exactly — not Dash's native `row_selectable`/`row_deletable` DataTable props, to keep every page's interaction model consistent and every action a pure, unit-testable function.
+
+---
+
+### Task 13: Registry page — view/update/delete dataset
+
+**Files:**
+- Modify: `medical_data_validator/dashboard/pages/registry.py`
+- Modify: `tests/test_dash_registry_page.py`
+
+**Interfaces:**
+- Consumes: `get_dataset(dataset_id) -> Optional[Dict]`, `update_dataset(dataset_id, *, description=None, tags=None) -> Optional[Dict]`, `delete_dataset(dataset_id) -> bool` (all in `medical_data_validator/registry.py`, verified signatures — `dataset_id` is the dataset's UUID `id`, not its `name`; there is no lookup-by-name function).
+- Produces: `_get_dataset_details(dataset_id) -> Tuple[bool, str, str]` (ok, message, formatted-details-or-empty-string), `_update_dataset_from_form(dataset_id, description, tags_csv) -> Tuple[bool, str]`, `_delete_dataset_by_id(dataset_id) -> Tuple[bool, str]`.
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `tests/test_dash_registry_page.py` (after the existing tests, keep everything above unchanged):
+
+```python
+def test_list_datasets_table_data_includes_id():
+    from medical_data_validator.dashboard.pages.registry import _create_dataset_from_form, _list_datasets_table_data
+    _create_dataset_from_form('id-check', '', '')
+    rows = _list_datasets_table_data()
+    row = next(r for r in rows if r['name'] == 'id-check')
+    assert row['id']
+
+
+def test_get_dataset_details_found():
+    from medical_data_validator.dashboard.pages.registry import _create_dataset_from_form, _list_datasets_table_data, _get_dataset_details
+    _create_dataset_from_form('lookup-me', 'a description', 'tag1')
+    dataset_id = next(r['id'] for r in _list_datasets_table_data() if r['name'] == 'lookup-me')
+    ok, message, details = _get_dataset_details(dataset_id)
+    assert ok is True
+    assert 'lookup-me' in details
+
+
+def test_get_dataset_details_not_found():
+    from medical_data_validator.dashboard.pages.registry import _get_dataset_details
+    ok, message, details = _get_dataset_details('nonexistent-id')
+    assert ok is False
+    assert 'not found' in message.lower()
+
+
+def test_get_dataset_details_requires_id():
+    from medical_data_validator.dashboard.pages.registry import _get_dataset_details
+    ok, message, details = _get_dataset_details('')
+    assert ok is False
+
+
+def test_update_dataset_from_form_changes_description():
+    from medical_data_validator.dashboard.pages.registry import _create_dataset_from_form, _list_datasets_table_data, _update_dataset_from_form
+    _create_dataset_from_form('update-me', 'old description', '')
+    dataset_id = next(r['id'] for r in _list_datasets_table_data() if r['name'] == 'update-me')
+    ok, message = _update_dataset_from_form(dataset_id, 'new description', '')
+    assert ok is True
+    rows = _list_datasets_table_data()
+    row = next(r for r in rows if r['name'] == 'update-me')
+    assert row['description'] == 'new description'
+
+
+def test_update_dataset_from_form_not_found():
+    from medical_data_validator.dashboard.pages.registry import _update_dataset_from_form
+    ok, message = _update_dataset_from_form('nonexistent-id', 'x', '')
+    assert ok is False
+
+
+def test_delete_dataset_by_id_removes_it():
+    from medical_data_validator.dashboard.pages.registry import _create_dataset_from_form, _list_datasets_table_data, _delete_dataset_by_id
+    _create_dataset_from_form('delete-me', '', '')
+    dataset_id = next(r['id'] for r in _list_datasets_table_data() if r['name'] == 'delete-me')
+    ok, message = _delete_dataset_by_id(dataset_id)
+    assert ok is True
+    rows = _list_datasets_table_data()
+    assert not any(r['name'] == 'delete-me' for r in rows)
+
+
+def test_delete_dataset_by_id_not_found():
+    from medical_data_validator.dashboard.pages.registry import _delete_dataset_by_id
+    ok, message = _delete_dataset_by_id('nonexistent-id')
+    assert ok is False
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `.venv/bin/python3 -m pytest tests/test_dash_registry_page.py -v`
+Expected: FAIL — `id` not in `_list_datasets_table_data()`'s rows yet, and `_get_dataset_details`/`_update_dataset_from_form`/`_delete_dataset_by_id` don't exist yet.
+
+- [ ] **Step 3: Replace `medical_data_validator/dashboard/pages/registry.py` entirely**
+
+```python
+"""Dash page: dataset registry (list, create, view, update, delete)."""
+
+import dash
+import dash_bootstrap_components as dbc
+from dash import html, dash_table, Input, Output, State, callback
+
+from medical_data_validator.dashboard.utils import register_page_once
+from medical_data_validator.registry import (
+    list_datasets, register_dataset, get_dataset, update_dataset, delete_dataset,
+)
+
+register_page_once(__name__, path='/registry', name='Registry')
+
+DASH_TENANT = 'default'
+
+layout = dbc.Container([
+    html.H2("Dataset Registry"),
+    dbc.Row([
+        dbc.Col(dbc.Input(id='registry-name-input', placeholder='Dataset name'), width=3),
+        dbc.Col(dbc.Input(id='registry-description-input', placeholder='Description (optional)'), width=4),
+        dbc.Col(dbc.Input(id='registry-tags-input', placeholder='Tags, comma-separated (optional)'), width=3),
+        dbc.Col(dbc.Button('Register dataset', id='registry-create-btn', color='primary'), width=2),
+    ], className='mb-3'),
+    html.Div(id='registry-create-message'),
+    dbc.Row([
+        dbc.Col(dbc.Input(id='registry-lookup-id-input', placeholder='Dataset ID (see ID column below)'), width=5),
+        dbc.Col(dbc.Button('View', id='registry-view-btn'), width=1),
+        dbc.Col(dbc.Button('Update', id='registry-update-btn'), width=2),
+        dbc.Col(dbc.Button('Delete', id='registry-delete-btn', color='danger'), width=2),
+    ], className='mb-3'),
+    html.Div(id='registry-lookup-message'),
+    html.Pre(id='registry-details', className='bg-light p-2'),
+    dash_table.DataTable(id='registry-table', columns=[
+        {'name': 'ID', 'id': 'id'},
+        {'name': 'Name', 'id': 'name'},
+        {'name': 'Description', 'id': 'description'},
+        {'name': 'Tags', 'id': 'tags'},
+        {'name': 'Created', 'id': 'created_at'},
+    ]),
+    dbc.Button('Refresh', id='registry-refresh-btn', className='mt-3'),
+], fluid=True)
+
+
+def _list_datasets_table_data(tenant=DASH_TENANT):
+    datasets = list_datasets(tenant=tenant)
+    return [
+        {
+            'id': d['id'],
+            'name': d['name'],
+            'description': d.get('description') or '',
+            'tags': ', '.join(d.get('tags') or []),
+            'created_at': d.get('created_at', ''),
+        }
+        for d in datasets
+    ]
+
+
+def _create_dataset_from_form(name, description, tags_csv):
+    name = (name or '').strip()
+    if not name:
+        return False, "Dataset name is required"
+    tags = [t.strip() for t in (tags_csv or '').split(',') if t.strip()]
+    try:
+        register_dataset(name, tenant=DASH_TENANT, description=description or None, tags=tags or None)
+        return True, f"Registered '{name}'"
+    except ValueError as exc:
+        return False, str(exc)
+
+
+def _get_dataset_details(dataset_id):
+    dataset_id = (dataset_id or '').strip()
+    if not dataset_id:
+        return False, "Dataset ID is required", ""
+    dataset = get_dataset(dataset_id)
+    if dataset is None:
+        return False, f"Dataset '{dataset_id}' not found", ""
+    lines = [f"{key}: {value}" for key, value in dataset.items()]
+    return True, "", "\n".join(lines)
+
+
+def _update_dataset_from_form(dataset_id, description, tags_csv):
+    dataset_id = (dataset_id or '').strip()
+    if not dataset_id:
+        return False, "Dataset ID is required"
+    tags = [t.strip() for t in (tags_csv or '').split(',') if t.strip()] if tags_csv else None
+    updated = update_dataset(dataset_id, description=description or None, tags=tags)
+    if updated is None:
+        return False, f"Dataset '{dataset_id}' not found"
+    return True, f"Updated '{updated['name']}'"
+
+
+def _delete_dataset_by_id(dataset_id):
+    dataset_id = (dataset_id or '').strip()
+    if not dataset_id:
+        return False, "Dataset ID is required"
+    if delete_dataset(dataset_id):
+        return True, f"Deleted dataset '{dataset_id}'"
+    return False, f"Dataset '{dataset_id}' not found"
+
+
+@callback(
+    [Output('registry-table', 'data'), Output('registry-create-message', 'children'),
+     Output('registry-lookup-message', 'children'), Output('registry-details', 'children')],
+    [Input('registry-create-btn', 'n_clicks'), Input('registry-refresh-btn', 'n_clicks'),
+     Input('registry-view-btn', 'n_clicks'), Input('registry-update-btn', 'n_clicks'),
+     Input('registry-delete-btn', 'n_clicks')],
+    [State('registry-name-input', 'value'),
+     State('registry-description-input', 'value'),
+     State('registry-tags-input', 'value'),
+     State('registry-lookup-id-input', 'value')],
+    prevent_initial_call=False,
+)
+def _handle_registry_actions(create_clicks, refresh_clicks, view_clicks, update_clicks, delete_clicks,
+                              name, description, tags_csv, lookup_id):
+    triggered = dash.ctx.triggered_id
+    create_message = ""
+    lookup_message = ""
+    details = ""
+    if triggered == 'registry-create-btn':
+        _ok, create_message = _create_dataset_from_form(name, description, tags_csv)
+    elif triggered == 'registry-view-btn':
+        _ok, lookup_message, details = _get_dataset_details(lookup_id)
+    elif triggered == 'registry-update-btn':
+        _ok, lookup_message = _update_dataset_from_form(lookup_id, description, tags_csv)
+    elif triggered == 'registry-delete-btn':
+        _ok, lookup_message = _delete_dataset_by_id(lookup_id)
+    return _list_datasets_table_data(), create_message, lookup_message, details
+```
+
+Note: `description`/`tags_csv` are shared `State`s between the create form and the update action (per the approved design — reusing the existing inputs rather than adding a second form). This means "Update" reads whatever is currently typed in the description/tags inputs, same as "Register dataset" does.
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `.venv/bin/python3 -m pytest tests/test_dash_registry_page.py -v`
+Expected: PASS (all tests, old and new).
+
+- [ ] **Step 5: Manual verification**
+
+```bash
+cd "/home/lenovo/Own Projects/medical-data-validator" && SECRET_KEY=test-secret .venv/bin/python launch_dashboard.py &
+sleep 2
+curl -s -o /dev/null -w "registry page: %{http_code}\n" http://localhost:5000/dash/registry
+kill %1
+```
+Expected: `200`.
+
+- [ ] **Step 6: Run the full test suite**
+
+Run: `.venv/bin/python3 -m pytest --ignore=tests/test_web_ui.py --junitxml=/tmp/task13_junit.xml` (read the XML's `tests=`/`errors=`/`failures=`/`skipped=` attributes — do not trust a piped terminal summary line in this environment)
+Expected: no new failures.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd "/home/lenovo/Own Projects/medical-data-validator" && git add medical_data_validator/dashboard/pages/registry.py tests/test_dash_registry_page.py
+git commit -m "Add view/update/delete dataset actions to the Dash Registry page"
+```
+
+---
+
+### Task 14: Jobs page — view job detail + PDF/CSV downloads
+
+**Files:**
+- Modify: `medical_data_validator/dashboard/pages/jobs.py`
+- Modify: `tests/test_dash_jobs_page.py`
+
+**Interfaces:**
+- Consumes: `get_job(job_id) -> Optional[Dict]` (`medical_data_validator/jobs.py`, verified signature). Verified: for `job_type='validate'` jobs, `job['result']` is exactly a `ValidationResult.to_dict()`-shaped dict — the same shape `generate_pdf_report`/`generate_csv_report` (`medical_data_validator/reports.py`) already consume on the Validate page (Task 8). For `job_type='anonymize'` jobs, `result` is `{'data': ..., 'rows': ...}` — NOT report-compatible, so downloads only apply to completed `validate` jobs.
+- Produces: `_get_job_detail(job_id) -> Tuple[bool, str, Optional[dict]]` (ok, summary-message, the job dict or `None`).
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `tests/test_dash_jobs_page.py` (after the existing tests, keep everything above unchanged):
+
+```python
+def test_get_job_detail_found():
+    from medical_data_validator.dashboard.pages.jobs import _submit_job_from_form, _list_jobs_table_data, _get_job_detail
+    _submit_job_from_form('validate', '{"age": [200]}')
+    for _ in range(20):
+        rows = _list_jobs_table_data()
+        if rows and rows[0]['status'] in ('completed', 'failed'):
+            break
+        time.sleep(0.1)
+    job_id = rows[0]['id']
+    ok, message, job = _get_job_detail(job_id)
+    assert ok is True
+    assert job is not None
+    assert job['id'] == job_id
+    assert job['job_type'] == 'validate'
+
+
+def test_get_job_detail_not_found():
+    from medical_data_validator.dashboard.pages.jobs import _get_job_detail
+    ok, message, job = _get_job_detail('nonexistent-id')
+    assert ok is False
+    assert job is None
+    assert 'not found' in message.lower()
+
+
+def test_get_job_detail_requires_id():
+    from medical_data_validator.dashboard.pages.jobs import _get_job_detail
+    ok, message, job = _get_job_detail('')
+    assert ok is False
+    assert job is None
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `.venv/bin/python3 -m pytest tests/test_dash_jobs_page.py -v`
+Expected: FAIL — `_get_job_detail` doesn't exist yet.
+
+- [ ] **Step 3: Replace `medical_data_validator/dashboard/pages/jobs.py` entirely**
+
+```python
+"""Dash page: async job submission, status polling, detail view, and report downloads."""
+
+import json
+
+import dash
+import dash_bootstrap_components as dbc
+from dash import dcc, html, dash_table, Input, Output, State, callback
+
+from medical_data_validator.dashboard.utils import register_page_once
+from medical_data_validator.jobs import submit_job, list_jobs, get_job
+
+register_page_once(__name__, path='/jobs', name='Jobs')
+
+DASH_TENANT = 'default'
+
+layout = dbc.Container([
+    html.H2("Validation Jobs"),
+    dbc.Row([
+        dbc.Col(dcc.Dropdown(id='jobs-type-dropdown',
+                              options=[{'label': 'Validate', 'value': 'validate'},
+                                       {'label': 'Anonymize', 'value': 'anonymize'}],
+                              value='validate'), width=2),
+        dbc.Col(dbc.Textarea(id='jobs-payload-input', placeholder='{"data": {"age": [200]}}'), width=7),
+        dbc.Col(dbc.Button('Submit job', id='jobs-submit-btn', color='primary'), width=3),
+    ], className='mb-3'),
+    html.Div(id='jobs-submit-message'),
+    dbc.Row([
+        dbc.Col(dbc.Input(id='jobs-lookup-id-input', placeholder='Job ID (see ID column below)'), width=5),
+        dbc.Col(dbc.Button('View Result', id='jobs-view-btn'), width=2),
+        dbc.Col(dbc.Button("Download PDF", id='jobs-download-pdf-btn'), width=2),
+        dbc.Col(dbc.Button("Download CSV", id='jobs-download-csv-btn'), width=2),
+    ], className='mb-3'),
+    html.Div(id='jobs-detail-message'),
+    dcc.Download(id='jobs-download-report'),
+    dcc.Store(id='jobs-last-detail-result'),
+    dash_table.DataTable(id='jobs-table', columns=[
+        {'name': 'ID', 'id': 'id'},
+        {'name': 'Type', 'id': 'job_type'},
+        {'name': 'Status', 'id': 'status'},
+        {'name': 'Created', 'id': 'created_at'},
+    ]),
+    dbc.Button('Refresh', id='jobs-refresh-btn', className='mt-3'),
+], fluid=True)
+
+
+def _list_jobs_table_data(tenant=DASH_TENANT):
+    return [
+        {
+            'id': j['id'],
+            'job_type': j['job_type'],
+            'status': j['status'],
+            'created_at': j.get('created_at', ''),
+        }
+        for j in list_jobs(tenant=tenant)
+    ]
+
+
+def _submit_job_from_form(job_type, payload_json):
+    if job_type not in ('validate', 'anonymize'):
+        return False, "job_type must be 'validate' or 'anonymize'"
+    try:
+        payload = json.loads(payload_json) if payload_json else {}
+    except (TypeError, ValueError) as exc:
+        return False, f"Invalid JSON payload: {exc}"
+    if not isinstance(payload, dict):
+        return False, "payload must be a JSON object"
+    submit_job(job_type, payload, tenant=DASH_TENANT, username='dash-ui')
+    return True, "Job submitted"
+
+
+def _get_job_detail(job_id):
+    job_id = (job_id or '').strip()
+    if not job_id:
+        return False, "Job ID is required", None
+    job = get_job(job_id)
+    if job is None:
+        return False, f"Job '{job_id}' not found", None
+    summary = f"status={job['status']} type={job['job_type']}"
+    if job.get('error'):
+        summary += f" error={job['error']}"
+    return True, summary, job
+
+
+@callback(
+    [Output('jobs-table', 'data'), Output('jobs-submit-message', 'children'),
+     Output('jobs-detail-message', 'children'), Output('jobs-last-detail-result', 'data')],
+    [Input('jobs-submit-btn', 'n_clicks'), Input('jobs-refresh-btn', 'n_clicks'),
+     Input('jobs-view-btn', 'n_clicks')],
+    [State('jobs-type-dropdown', 'value'), State('jobs-payload-input', 'value'),
+     State('jobs-lookup-id-input', 'value')],
+    prevent_initial_call=False,
+)
+def _handle_jobs_actions(submit_clicks, refresh_clicks, view_clicks, job_type, payload_json, lookup_id):
+    triggered = dash.ctx.triggered_id
+    submit_message = ""
+    detail_message = ""
+    detail_job = dash.no_update
+    if triggered == 'jobs-submit-btn':
+        _ok, submit_message = _submit_job_from_form(job_type, payload_json)
+    elif triggered == 'jobs-view-btn':
+        _ok, detail_message, detail_job = _get_job_detail(lookup_id)
+    return _list_jobs_table_data(), submit_message, detail_message, detail_job
+
+
+@callback(
+    Output('jobs-download-report', 'data'),
+    [Input('jobs-download-pdf-btn', 'n_clicks'), Input('jobs-download-csv-btn', 'n_clicks')],
+    State('jobs-last-detail-result', 'data'),
+    prevent_initial_call=True,
+)
+def _download_job_report(pdf_clicks, csv_clicks, job):
+    if not job or job.get('job_type') != 'validate' or job.get('status') != 'completed' or not job.get('result'):
+        return dash.no_update
+    from medical_data_validator.reports import generate_pdf_report, generate_csv_report
+    triggered = dash.ctx.triggered_id
+    result_dict = job['result']
+    if triggered == 'jobs-download-pdf-btn':
+        return dcc.send_bytes(generate_pdf_report(result_dict), f"job_{job['id']}_report.pdf")
+    return dcc.send_string(generate_csv_report(result_dict), f"job_{job['id']}_report.csv")
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `.venv/bin/python3 -m pytest tests/test_dash_jobs_page.py -v`
+Expected: PASS (all tests, old and new).
+
+- [ ] **Step 5: Manual verification**
+
+```bash
+cd "/home/lenovo/Own Projects/medical-data-validator" && SECRET_KEY=test-secret .venv/bin/python launch_dashboard.py &
+sleep 2
+curl -s -o /dev/null -w "jobs page: %{http_code}\n" http://localhost:5000/dash/jobs
+kill %1
+```
+Expected: `200`.
+
+- [ ] **Step 6: Run the full test suite**
+
+Run: `.venv/bin/python3 -m pytest --ignore=tests/test_web_ui.py --junitxml=/tmp/task14_junit.xml` (read the XML attributes, not a piped terminal summary)
+Expected: no new failures.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd "/home/lenovo/Own Projects/medical-data-validator" && git add medical_data_validator/dashboard/pages/jobs.py tests/test_dash_jobs_page.py
+git commit -m "Add job detail view and PDF/CSV report downloads to the Dash Jobs page"
+```
+
+---
+
+### Task 15: Audit page — total record count
+
+**Files:**
+- Modify: `medical_data_validator/dashboard/pages/audit.py`
+- Modify: `tests/test_dash_audit_page.py`
+
+**Interfaces:**
+- Consumes: `count_log(**kwargs) -> int` (`medical_data_validator/audit.py`, verified signature — accepts the same filter kwargs as `query_log`, e.g. `tenant=`).
+- Produces: `_count_audit_log(tenant=DASH_TENANT) -> int`.
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `tests/test_dash_audit_page.py` (after the existing tests, keep everything above unchanged):
+
+```python
+def test_count_audit_log_matches_number_logged():
+    from medical_data_validator.dashboard.pages.audit import _count_audit_log
+    for i in range(3):
+        audit.log_event('validate', username=f'user-{i}', tenant='default')
+    assert _count_audit_log() == 3
+
+
+def test_count_audit_log_filters_by_tenant():
+    from medical_data_validator.dashboard.pages.audit import _count_audit_log
+    audit.log_event('validate', username='alice', tenant='default')
+    audit.log_event('validate', username='bob', tenant='other-tenant')
+    assert _count_audit_log(tenant='default') == 1
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `.venv/bin/python3 -m pytest tests/test_dash_audit_page.py -v`
+Expected: FAIL — `_count_audit_log` doesn't exist yet.
+
+- [ ] **Step 3: Replace `medical_data_validator/dashboard/pages/audit.py` entirely**
+
+```python
+"""Dash page: audit log viewer."""
+
+import dash_bootstrap_components as dbc
+from dash import html, dash_table, Input, Output, callback
+
+from medical_data_validator.dashboard.utils import register_page_once
+from medical_data_validator.audit import query_log, count_log
+
+register_page_once(__name__, path='/audit', name='Audit Log')
+
+DASH_TENANT = 'default'
+
+layout = dbc.Container([
+    html.H2("Audit Log"),
+    html.Div(id='audit-count-message', className='mb-2'),
+    dash_table.DataTable(id='audit-table', columns=[
+        {'name': 'Timestamp', 'id': 'timestamp'},
+        {'name': 'Username', 'id': 'username'},
+        {'name': 'Event Type', 'id': 'event_type'},
+        {'name': 'Dataset ID', 'id': 'dataset_id'},
+    ], page_size=25),
+    dbc.Button('Refresh', id='audit-refresh-btn', className='mt-3'),
+], fluid=True)
+
+
+def _list_audit_log_table_data(tenant=DASH_TENANT, limit=100):
+    records = query_log(tenant=tenant, limit=limit)
+    return [
+        {
+            'timestamp': r.get('timestamp', ''),
+            'username': r.get('username', ''),
+            'event_type': r.get('event_type', ''),
+            'dataset_id': r.get('dataset_id', ''),
+        }
+        for r in records
+    ]
+
+
+def _count_audit_log(tenant=DASH_TENANT):
+    return count_log(tenant=tenant)
+
+
+@callback(
+    [Output('audit-table', 'data'), Output('audit-count-message', 'children')],
+    Input('audit-refresh-btn', 'n_clicks'),
+    prevent_initial_call=False,
+)
+def _handle_audit_refresh(n_clicks):
+    rows = _list_audit_log_table_data()
+    total = _count_audit_log()
+    return rows, f"Showing {len(rows)} of {total} records"
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `.venv/bin/python3 -m pytest tests/test_dash_audit_page.py -v`
+Expected: PASS (all tests, old and new).
+
+- [ ] **Step 5: Manual verification**
+
+```bash
+cd "/home/lenovo/Own Projects/medical-data-validator" && SECRET_KEY=test-secret .venv/bin/python launch_dashboard.py &
+sleep 2
+curl -s -o /dev/null -w "audit page: %{http_code}\n" http://localhost:5000/dash/audit
+kill %1
+```
+Expected: `200`.
+
+- [ ] **Step 6: Run the full test suite**
+
+Run: `.venv/bin/python3 -m pytest --ignore=tests/test_web_ui.py --junitxml=/tmp/task15_junit.xml` (read the XML attributes, not a piped terminal summary)
+Expected: no new failures.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd "/home/lenovo/Own Projects/medical-data-validator" && git add medical_data_validator/dashboard/pages/audit.py tests/test_dash_audit_page.py
+git commit -m "Add total record count to the Dash Audit Log page"
+```
+
+---
+
+### Task 16: Custom Rules page — remove a rule
+
+**Files:**
+- Modify: `medical_data_validator/dashboard/pages/custom_rules.py`
+- Modify: `tests/test_dash_custom_rules_page.py`
+
+**Interfaces:**
+- Consumes: `_custom_rules_storage` (module-level list in `medical_data_validator/dashboard/routes.py`, same as Task 9). Mirrors `routes.py:api_remove_custom_rule`'s pop-by-name logic exactly (verified: iterate, find by `name`, `.pop(i)`, else "not found").
+- Produces: `_remove_custom_rule_from_form(name) -> Tuple[bool, str]`.
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `tests/test_dash_custom_rules_page.py` (after the existing tests, keep everything above unchanged):
+
+```python
+def test_remove_custom_rule_from_form_removes_it():
+    from medical_data_validator.dashboard.pages.custom_rules import _add_custom_rule_from_form, _remove_custom_rule_from_form, _list_custom_rules_table_data
+    _add_custom_rule_from_form('remove-me', r'\bfax\b', 'medium')
+    ok, message = _remove_custom_rule_from_form('remove-me')
+    assert ok is True
+    rows = _list_custom_rules_table_data()
+    assert not any(r['name'] == 'remove-me' for r in rows)
+
+
+def test_remove_custom_rule_from_form_not_found():
+    from medical_data_validator.dashboard.pages.custom_rules import _remove_custom_rule_from_form
+    ok, message = _remove_custom_rule_from_form('nonexistent-rule')
+    assert ok is False
+    assert 'not found' in message.lower()
+
+
+def test_remove_custom_rule_from_form_requires_name():
+    from medical_data_validator.dashboard.pages.custom_rules import _remove_custom_rule_from_form
+    ok, message = _remove_custom_rule_from_form('')
+    assert ok is False
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `.venv/bin/python3 -m pytest tests/test_dash_custom_rules_page.py -v`
+Expected: FAIL — `_remove_custom_rule_from_form` doesn't exist yet.
+
+- [ ] **Step 3: Replace `medical_data_validator/dashboard/pages/custom_rules.py` entirely**
+
+```python
+"""Dash page: compliance custom-rules (list, add, remove)."""
+
+import dash
+import dash_bootstrap_components as dbc
+from dash import dcc, html, dash_table, Input, Output, State, callback
+
+from medical_data_validator.dashboard.routes import _custom_rules_storage
+from medical_data_validator.dashboard.utils import register_page_once
+
+register_page_once(__name__, path='/custom-rules', name='Custom Rules')
+
+layout = dbc.Container([
+    html.H2("Custom Compliance Rules"),
+    dbc.Row([
+        dbc.Col(dbc.Input(id='rules-name-input', placeholder='Rule name'), width=3),
+        dbc.Col(dbc.Input(id='rules-pattern-input', placeholder='Regex pattern'), width=4),
+        dbc.Col(dcc.Dropdown(id='rules-severity-dropdown',
+                              options=[{'label': s, 'value': s} for s in ('low', 'medium', 'high', 'critical')],
+                              value='medium'), width=2),
+        dbc.Col(dbc.Button('Add rule', id='rules-add-btn', color='primary'), width=2),
+        dbc.Col(dbc.Button('Remove', id='rules-remove-btn', color='danger'), width=1),
+    ], className='mb-3'),
+    html.Div(id='rules-add-message'),
+    dash_table.DataTable(id='rules-table', columns=[
+        {'name': 'Name', 'id': 'name'},
+        {'name': 'Pattern', 'id': 'pattern'},
+        {'name': 'Severity', 'id': 'severity'},
+    ]),
+    dbc.Button('Refresh', id='rules-refresh-btn', className='mt-3'),
+], fluid=True)
+
+
+def _list_custom_rules_table_data():
+    return [
+        {'name': r['name'], 'pattern': r['pattern'], 'severity': r.get('severity', 'medium')}
+        for r in _custom_rules_storage
+    ]
+
+
+def _add_custom_rule_from_form(name, pattern, severity):
+    name = (name or '').strip()
+    pattern = (pattern or '').strip()
+    if not name or not pattern:
+        return False, "Both name and pattern are required"
+    rule_data = {'name': name, 'pattern': pattern, 'severity': severity or 'medium',
+                 'field_pattern': None, 'description': '', 'recommendation': None}
+    for i, existing in enumerate(_custom_rules_storage):
+        if existing['name'] == name:
+            _custom_rules_storage[i] = rule_data
+            return True, f"Updated rule '{name}'"
+    _custom_rules_storage.append(rule_data)
+    return True, f"Added rule '{name}'"
+
+
+def _remove_custom_rule_from_form(name):
+    name = (name or '').strip()
+    if not name:
+        return False, "Rule name is required"
+    for i, existing in enumerate(_custom_rules_storage):
+        if existing['name'] == name:
+            _custom_rules_storage.pop(i)
+            return True, f"Removed rule '{name}'"
+    return False, f"Rule '{name}' not found"
+
+
+@callback(
+    [Output('rules-table', 'data'), Output('rules-add-message', 'children')],
+    [Input('rules-add-btn', 'n_clicks'), Input('rules-remove-btn', 'n_clicks'), Input('rules-refresh-btn', 'n_clicks')],
+    [State('rules-name-input', 'value'), State('rules-pattern-input', 'value'),
+     State('rules-severity-dropdown', 'value')],
+    prevent_initial_call=False,
+)
+def _handle_rules_actions(add_clicks, remove_clicks, refresh_clicks, name, pattern, severity):
+    triggered = dash.ctx.triggered_id
+    message = ""
+    if triggered == 'rules-add-btn':
+        _ok, message = _add_custom_rule_from_form(name, pattern, severity)
+    elif triggered == 'rules-remove-btn':
+        _ok, message = _remove_custom_rule_from_form(name)
+    return _list_custom_rules_table_data(), message
+```
+
+Note: "Remove" reads the same `rules-name-input` State as "Add" (per the approved design — one name field, multiple action buttons), so the user types a rule name and clicks either Add (with a pattern) or Remove (pattern/severity ignored).
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `.venv/bin/python3 -m pytest tests/test_dash_custom_rules_page.py -v`
+Expected: PASS (all tests, old and new).
+
+- [ ] **Step 5: Manual verification**
+
+```bash
+cd "/home/lenovo/Own Projects/medical-data-validator" && SECRET_KEY=test-secret .venv/bin/python launch_dashboard.py &
+sleep 2
+curl -s -o /dev/null -w "custom rules page: %{http_code}\n" http://localhost:5000/dash/custom-rules
+kill %1
+```
+Expected: `200`.
+
+- [ ] **Step 6: Run the full test suite**
+
+Run: `.venv/bin/python3 -m pytest --ignore=tests/test_web_ui.py --junitxml=/tmp/task16_junit.xml` (read the XML attributes, not a piped terminal summary)
+Expected: no new failures.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd "/home/lenovo/Own Projects/medical-data-validator" && git add medical_data_validator/dashboard/pages/custom_rules.py tests/test_dash_custom_rules_page.py
+git commit -m "Add remove-rule action to the Dash Custom Rules page"
+```
+
+---
+
+### Task 17: End-to-end verification of the addendum
+
+**Files:** none (verification only).
+
+- [ ] **Step 1:** Full test suite: `.venv/bin/python3 -m pytest --ignore=tests/test_web_ui.py --junitxml=/tmp/task17_junit.xml` — expect all pass, no new failures.
+- [ ] **Step 2:** Confirm all 6 Dash pages still navigate: `for path in "" "registry" "jobs" "custom-rules" "audit" "auth"; do curl -s -o /dev/null -w "/dash/$path: %{http_code}\n" "http://localhost:5000/dash/$path"; done` against a running `launch_dashboard.py` — expect `200` for all.
+- [ ] **Step 3:** Update `docs/superpowers/specs/2026-08-22-phase-b-coverage-gaps-design.md`'s Section D or add a note that the Dash admin pages now match the originally-specified capability set (view/update/delete for Registry, job detail + downloads for Jobs, count for Audit, remove for Custom Rules), closing the gap Task 12's final review found.
+- [ ] **Step 4:** Push: `git push origin master` (pending explicit user go-ahead, same as the original Task 12).
