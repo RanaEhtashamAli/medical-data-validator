@@ -111,6 +111,14 @@ All pages act as tenant `'default'` with no role check (bypassing `login_require
 
 **Testing**: every page's callback logic is extracted into a plain, directly-testable function first (e.g. `_list_datasets_for_table(tenant, tag, limit, offset)`, `_submit_job_from_form(job_type, payload)`), with the `@dash_app.callback`-decorated function being a thin pass-through — the same pattern Phase A's Task 6 already established for the Validate page's `_run_validation_for_upload`.
 
+**Status (Phase B.1 addendum, closing a gap found in Phase B's final review):** Phase B's initial implementation (Tasks 6-11) shipped list+create only for Registry, Jobs, Audit, and Custom Rules — narrower than this section describes. A final whole-branch review caught the gap; a follow-up addendum (Tasks 13-16) closed it, bringing each page's calling convention in line with what's documented above:
+- Registry page now also calls `get_dataset`/`update_dataset`/`delete_dataset` (view/update/delete actions, with a tenant-ownership check added on top since those functions are plain UUID lookups with no tenant filter of their own).
+- Jobs page now also calls `get_job` (view job detail, same tenant-ownership check applied) and gained PDF/CSV download buttons next to a viewed job's result, alongside the Validate page's.
+- Audit page now also calls `count_log` (a "Showing X of Y records" total, independent of the page-limited list).
+- Custom Rules page now also removes rules from `_custom_rules_storage` (no tenant concept applies here — the storage itself is a plain, un-scoped list).
+
+`get_run_history`/`count_runs` (Registry) remain unused by any Dash page — no task has wired up a run-history view yet; this is the one remaining gap between this section and what's shipped.
+
 ## Error handling
 
 - New security/batch endpoints reuse the existing `try/except` + `logger.exception` + `traceback` (gated behind `current_app.debug`) pattern already standardized across `routes.py` in Phase A — no new error-handling convention introduced.
