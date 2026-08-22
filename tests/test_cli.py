@@ -207,12 +207,12 @@ class TestMain:
         
         try:
             # Test main function
-            with patch('sys.argv', ['medical-validator', temp_file]):
+            with patch('sys.argv', ['medical-validator', 'validate', temp_file]):
                 with pytest.raises(SystemExit) as exc_info:
                     main()
                 # Should exit with success code (0)
                 assert exc_info.value.code == 0
-            
+
             # Verify function calls
             mock_load_data.assert_called_once_with(temp_file)
             mock_create_validator.assert_called_once()
@@ -228,7 +228,7 @@ class TestMain:
         mock_load_data.side_effect = FileNotFoundError("File not found")
         
         # Test main function
-        with patch('sys.argv', ['medical-validator', 'nonexistent.csv']):
+        with patch('sys.argv', ['medical-validator', 'validate', 'nonexistent.csv']):
             with pytest.raises(SystemExit) as exc_info:
                 main()
             
@@ -242,7 +242,7 @@ class TestMain:
         mock_load_data.side_effect = ValueError("Invalid format")
         
         # Test main function
-        with patch('sys.argv', ['medical-validator', 'invalid.txt']):
+        with patch('sys.argv', ['medical-validator', 'validate', 'invalid.txt']):
             with pytest.raises(SystemExit) as exc_info:
                 main()
             
@@ -271,7 +271,7 @@ class TestMain:
         
         try:
             # Test main function with output file
-            with patch('sys.argv', ['medical-validator', temp_file, '--output', 'output.txt']):
+            with patch('sys.argv', ['medical-validator', 'validate', temp_file, '--output', 'output.txt']):
                 with pytest.raises(SystemExit) as exc_info:
                     main()
                 # Should exit with success code (0)
@@ -331,7 +331,7 @@ class TestMain:
         
         try:
             # Test main function with JSON output
-            with patch('sys.argv', ['medical-validator', temp_file, '--format', 'json']):
+            with patch('sys.argv', ['medical-validator', 'validate', temp_file, '--format', 'json']):
                 with pytest.raises(SystemExit) as exc_info:
                     main()
                 # Should exit with success code (0)
@@ -426,6 +426,63 @@ class TestCLIIntegration:
             assert len(error_issues) == 0, f"Found errors: {error_issues}"
         finally:
             os.unlink(temp_file)
+
+
+class TestConsolidatedCLI:
+    """Regression tests for the Phase A CLI consolidation/packaging fix."""
+
+    def test_console_script_module_imports_cleanly(self):
+        """The entry point pyproject.toml declares must actually be
+        importable — this is exactly the gap that let a broken console
+        script ship undetected."""
+        import importlib
+        module = importlib.import_module("medical_data_validator.cli")
+        assert hasattr(module, "main")
+
+    def test_cli_has_all_six_subcommands(self, capsys):
+        from medical_data_validator.cli import main
+        import sys
+        old_argv = sys.argv
+        try:
+            sys.argv = ["medical-validator", "--help"]
+            try:
+                main()
+            except SystemExit:
+                pass
+        finally:
+            sys.argv = old_argv
+        out = capsys.readouterr().out
+        for cmd in ("validate", "dashboard", "api", "benchmark", "compliance", "demo"):
+            assert cmd in out
+
+    def test_compliance_subcommand_builds_code_validator_without_error(self, tmp_path):
+        """The old code called MedicalCodeValidator.add_code_type(), which
+        doesn't exist. This must not raise for the default --standards."""
+        from medical_data_validator.cli import run_compliance_check
+        import argparse
+
+        csv_path = tmp_path / "data.csv"
+        pd.DataFrame({"diagnosis_code": ["A00.0"], "test_code": ["1234-5"]}).to_csv(csv_path, index=False)
+
+        args = argparse.Namespace(
+            file=str(csv_path),
+            standards=["hipaa", "icd10", "loinc"],
+            output=None,
+        )
+        run_compliance_check(args)  # must not raise
+
+    def test_dashboard_subcommand_imports_real_symbol(self):
+        """The old code imported a module-level `app` that doesn't exist in
+        dashboard.app. Must import create_dashboard_app instead."""
+        from medical_data_validator.dashboard.app import create_dashboard_app
+        app = create_dashboard_app()
+        assert app is not None
+
+    def test_benchmark_subcommand_imports_real_module(self):
+        """The old code imported run_enhanced_benchmarks/run_real_benchmarks,
+        neither of which exist anywhere in the repo."""
+        from benchmarks.run_benchmarks import main as benchmark_main
+        assert callable(benchmark_main)
 
 
 if __name__ == "__main__":

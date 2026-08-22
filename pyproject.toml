@@ -171,10 +171,10 @@ Repository = "https://github.com/RanaEhtashamAli/medical-data-validator"
 "PyPI" = "https://pypi.org/project/medical-data-validator/"
 
 [project.scripts]
-medical-validator = "medical_data_validator_cli:main"
+medical-validator = "medical_data_validator.cli:main"
 
 [project.entry-points."console_scripts"]
-medical-validator = "medical_data_validator_cli:main"
+medical-validator = "medical_data_validator.cli:main"
 
 # Third-party compliance-standard plugins register here.
 # A plugin package adds an entry like:

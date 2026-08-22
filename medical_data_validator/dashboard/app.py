@@ -2,6 +2,7 @@
 Main entry point for the Medical Data Validator Dashboard.
 """
 
+import logging
 import sys
 import os
 
@@ -11,7 +12,8 @@ if __name__ == "__main__":
     sys.path.insert(0, project_root)
 
 import secrets
-from flask import Flask, jsonify
+import traceback
+from flask import Flask, jsonify, current_app
 import dash
 import dash_bootstrap_components as dbc
 from werkzeug.exceptions import HTTPException
@@ -23,6 +25,8 @@ except ImportError:
     # Fallback for relative imports when used as package
     from .routes import register_routes
     from .dash_layout import setup_dash_layout, setup_dash_callbacks
+
+logger = logging.getLogger(__name__)
 
 
 def create_dashboard_app():
@@ -46,14 +50,12 @@ def create_dashboard_app():
         # Don't handle HTTP exceptions (like 404, 405, etc.)
         if isinstance(e, HTTPException):
             return e
-        
-        import traceback
-        print("GLOBAL FLASK ERROR:", e)
-        print(traceback.format_exc())
+
+        logger.exception("Unhandled Flask error: %s", e)
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if current_app.debug else None,
         }), 500
 
     # Initialize Dash
@@ -69,10 +71,65 @@ def create_dashboard_app():
     return app
 
 
+def create_production_app():
+    """Build the dashboard app configured for production (non-debug) serving."""
+    app = create_dashboard_app()
+    app.config.update({
+        'TESTING': False,
+        'DEBUG': False,
+        'JSON_SORT_KEYS': False,
+        'JSONIFY_PRETTYPRINT_REGULAR': False,
+    })
+    return app
+
+
+def run_production_server(host: str = '0.0.0.0', port: int = 8000, workers: int = 4, debug: bool = False) -> None:
+    """Serve the app via Gunicorn if available, else Flask's dev server."""
+    app = create_production_app()
+    if debug:
+        app.config['DEBUG'] = True
+        app.run(host=host, port=port, debug=True)
+        return
+    try:
+        import gunicorn.app.base
+
+        class StandaloneApplication(gunicorn.app.base.BaseApplication):
+            def __init__(self, app, options=None):
+                self.options = options or {}
+                self.application = app
+                super().__init__()
+
+            def load_config(self):
+                for key, value in self.options.items():
+                    self.cfg.set(key.lower(), value)
+
+            def load(self):
+                return self.application
+
+        options = {
+            'bind': f'{host}:{port}',
+            'workers': workers,
+            'worker_class': 'sync',
+            'timeout': 120,
+            'keepalive': 2,
+            'max_requests': 1000,
+            'max_requests_jitter': 100,
+            'preload_app': True,
+            'access_logfile': '-',
+            'error_logfile': '-',
+            'loglevel': 'info',
+        }
+        logger.info("Starting production API server on %s:%s", host, port)
+        StandaloneApplication(app, options).run()
+    except ImportError:
+        logger.warning("Gunicorn not available, using development server")
+        app.run(host=host, port=port, debug=False)
+
+
 def run_dashboard():
     app = create_dashboard_app()
     app.run(host='0.0.0.0', port=5000, debug=True)
 
 
 if __name__ == '__main__':
-    run_dashboard() 
+    run_dashboard()

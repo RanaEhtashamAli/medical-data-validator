@@ -20,7 +20,7 @@ from pathlib import Path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-from medical_data_validator.dashboard.app import create_dashboard_app
+from medical_data_validator.dashboard.app import run_production_server
 
 # Configure logging
 logging.basicConfig(
@@ -32,21 +32,6 @@ logging.basicConfig(
     ]
 )
 
-logger = logging.getLogger(__name__)
-
-def create_api_server():
-    """Create and configure the API server."""
-    app = create_dashboard_app()
-    
-    # Production configuration
-    app.config.update({
-        'TESTING': False,
-        'DEBUG': False,
-        'JSON_SORT_KEYS': False,
-        'JSONIFY_PRETTYPRINT_REGULAR': False
-    })
-    
-    return app
 
 def main():
     """Main entry point for the API server."""
@@ -55,55 +40,10 @@ def main():
     parser.add_argument('--port', type=int, default=8000, help='Port to bind to (default: 8000)')
     parser.add_argument('--debug', action='store_true', help='Enable debug mode')
     parser.add_argument('--workers', type=int, default=4, help='Number of worker processes (default: 4)')
-    
+
     args = parser.parse_args()
-    
-    # Create the application
-    app = create_api_server()
-    
-    if args.debug:
-        app.config['DEBUG'] = True
-        logger.info("Starting API server in debug mode")
-        app.run(host=args.host, port=args.port, debug=True)
-    else:
-        # Production server with Gunicorn
-        try:
-            import gunicorn.app.base
-            
-            class StandaloneApplication(gunicorn.app.base.BaseApplication):
-                def __init__(self, app, options=None):
-                    self.options = options or {}
-                    self.application = app
-                    super().__init__()
-                
-                def load_config(self):
-                    for key, value in self.options.items():
-                        self.cfg.set(key.lower(), value)
-                
-                def load(self):
-                    return self.application
-            
-            options = {
-                'bind': f'{args.host}:{args.port}',
-                'workers': args.workers,
-                'worker_class': 'sync',
-                'timeout': 120,
-                'keepalive': 2,
-                'max_requests': 1000,
-                'max_requests_jitter': 100,
-                'preload_app': True,
-                'access_logfile': '-',
-                'error_logfile': '-',
-                'loglevel': 'info'
-            }
-            
-            logger.info(f"Starting production API server on {args.host}:{args.port}")
-            StandaloneApplication(app, options).run()
-            
-        except ImportError:
-            logger.warning("Gunicorn not available, using development server")
-            logger.info(f"Starting development API server on {args.host}:{args.port}")
-            app.run(host=args.host, port=args.port, debug=False)
+    run_production_server(host=args.host, port=args.port, workers=args.workers, debug=args.debug)
+
 
 if __name__ == '__main__':
-    main() 
+    main()
