@@ -31,12 +31,17 @@ try:
     from medical_data_validator.validators import PHIDetector, DataQualityChecker, MedicalCodeValidator, SchemaValidator, RangeValidator, DateValidator
     from medical_data_validator.extensions import get_profile
     from medical_data_validator.dashboard.utils import load_data, generate_charts
+    from medical_data_validator.performance import BatchValidator, ValidationCache
 except ImportError:
     # Fallback for relative imports when used as package
     from ..core import MedicalDataValidator, ValidationResult
     from ..validators import PHIDetector, DataQualityChecker, MedicalCodeValidator, SchemaValidator, RangeValidator, DateValidator
     from ..extensions import get_profile
     from .utils import load_data, generate_charts
+    from ..performance import BatchValidator, ValidationCache
+
+# Module-level validation cache, shared across requests
+_validation_cache = ValidationCache(max_size=int(os.environ.get('VALIDATION_CACHE_MAX_SIZE', 1000)))
 
 def convert_numpy_types(obj):
     """Convert numpy types to native Python types for JSON serialization."""
@@ -330,6 +335,9 @@ def api_validate_data():
             except (TypeError, ValueError) as e:
                 return jsonify({"success": False, "error": f"Invalid 'validators' JSON: {e}"}), 400
 
+        batch_size = request.args.get('batch_size', type=int)
+        use_cache = request.args.get('use_cache', 'false').lower() == 'true'
+
         logger.debug("Parameters: detect_phi=%s, quality_checks=%s, profile='%s'", detect_phi, quality_checks, profile)
 
         # Convert data to DataFrame
@@ -385,7 +393,11 @@ def api_validate_data():
         # Validate data
         logger.debug("Validating data...")
         try:
-            result = validator.validate(df)
+            if batch_size:
+                cache = _validation_cache if use_cache else None
+                result = BatchValidator(validator, batch_size=batch_size, cache=cache).validate_batches(df)
+            else:
+                result = validator.validate(df)
             logger.debug("Validation completed: %d issues found", len(result.issues))
         except Exception as e:
             logger.exception("Error during validation: %s", e)
@@ -468,6 +480,9 @@ def api_validate_file():
             except (TypeError, ValueError) as e:
                 return jsonify({"success": False, "error": f"Invalid 'validators' JSON: {e}"}), 400
 
+        batch_size = request.form.get('batch_size', type=int)
+        use_cache = request.form.get('use_cache', 'false').lower() == 'true'
+
         # Save file temporarily
         with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file.filename.rsplit('.', 1)[1]}") as tmp_file:
             file.save(tmp_file.name)
@@ -481,7 +496,11 @@ def api_validate_file():
             validator = create_validator(detect_phi, quality_checks, profile, validators_config=validators_config)
 
             # Validate data
-            result = validator.validate(data)
+            if batch_size:
+                cache = _validation_cache if use_cache else None
+                result = BatchValidator(validator, batch_size=batch_size, cache=cache).validate_batches(data)
+            else:
+                result = validator.validate(data)
             
             # Generate compliance report
             compliance_report = generate_compliance_report(data, result, standards)
