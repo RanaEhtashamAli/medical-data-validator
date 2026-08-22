@@ -20,6 +20,7 @@ Two endpoints touch process-wide mutable global state:
   leak into other test files.
 """
 
+import copy
 import io
 import json
 
@@ -51,14 +52,22 @@ def _clean_custom_rules():
 @pytest.fixture
 def clean_monitor():
     """Save/restore the global monitor's mutable state around a test that
-    needs deterministic alerts/quality-history."""
+    needs deterministic alerts/quality-history/stats. Covers monitor.stats
+    (a MonitoringStats dataclass: total_validations, successful_validations,
+    failed_validations, average_processing_time, active_alerts,
+    last_validation_time) in addition to alerts/quality_history/counter —
+    record_validation_result() and acknowledge/resolve all mutate .stats,
+    and without restoring it here that mutation would permanently leak into
+    the shared process-wide monitor singleton for the rest of the test run."""
     alerts_before = list(monitor.alerts)
     history_before = {k: list(v) for k, v in monitor.quality_history.items()}
     counter_before = monitor.alert_id_counter
+    stats_before = copy.deepcopy(monitor.stats)
     yield monitor
     monitor.alerts = alerts_before
     monitor.quality_history = history_before
     monitor.alert_id_counter = counter_before
+    monitor.stats = stats_before
 
 
 PHI_CSV = b"ssn,email,name\n123-45-6789,alice@example.com,Alice Smith\n987-65-4321,bob@example.com,Bob Jones\n"
