@@ -80,3 +80,12 @@ def test_count_audit_log_filters_by_tenant():
     audit.log_event('validate', username='alice', tenant='default')
     audit.log_event('validate', username='bob', tenant='other-tenant')
     assert _count_audit_log(tenant='default') == 1
+
+
+def test_handle_audit_refresh_shows_true_total_not_capped_list_length():
+    from medical_data_validator.dashboard.pages.audit import _handle_audit_refresh
+    for i in range(105):
+        audit.log_event('validate', username=f'user-{i}', tenant='default')
+    rows, message = _handle_audit_refresh(1)
+    assert len(rows) == 100  # _list_audit_log_table_data's default limit
+    assert message == "Showing 100 of 105 records"
