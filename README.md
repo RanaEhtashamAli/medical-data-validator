@@ -105,6 +105,15 @@ anon_df = validator.anonymize(
 | POST | `/api/report/inline/pdf` | Generate PDF report |
 | POST | `/api/report/inline/csv` | Generate CSV report |
 | GET | `/api/audit` | Query audit log |
+| POST | `/api/auth/token` | Exchange username + password for a JWT |
+| GET | `/api/auth/me` | Info about the current authenticated user |
+| GET/POST | `/api/auth/users` | List / create users (admin) |
+| DELETE | `/api/auth/users/<username>` | Deactivate a user (admin) |
+| POST | `/api/auth/tenants` | Create a tenant (admin) |
+| GET/POST | `/api/registry/datasets` | List / register datasets |
+| GET/PATCH/DELETE | `/api/registry/datasets/<id>` | Read, update, or remove a dataset entry |
+| GET | `/api/registry/datasets/<id>/history` | Dataset's validation run history |
+| POST | `/api/registry/datasets/<id>/runs` | Record a validation run against a dataset |
 
 ## Docker
 

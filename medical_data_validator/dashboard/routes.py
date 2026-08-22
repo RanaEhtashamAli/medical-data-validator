@@ -1049,40 +1049,10 @@ def create_api_blueprint():
         """Root API endpoint with information."""
         return api_root()
 
-    @api_bp.route('/health', methods=['GET'])
-    def api_health_endpoint():
-        """Health check endpoint for monitoring."""
-        return api_health()
-
-    @api_bp.route('/validate/data', methods=['POST'])
-    def api_validate_data_endpoint():
-        """Validate JSON data via API."""
-        return api_validate_data()
-
-    @api_bp.route('/validate/file', methods=['POST'])
-    def api_validate_file_endpoint():
-        """Validate uploaded file via API."""
-        return api_validate_file()
-
-    @api_bp.route('/compliance/check', methods=['POST'])
-    def api_compliance_check_endpoint():
-        """Check compliance with medical standards."""
-        return api_compliance_check()
-
     @api_bp.route('/compliance/v1.2', methods=['POST'])
     def api_v1_2_compliance_endpoint():
         """v1.2 Advanced compliance validation."""
         return api_v1_2_compliance()
-
-    @api_bp.route('/profiles', methods=['GET'])
-    def api_profiles_endpoint():
-        """Get available validation profiles."""
-        return api_profiles()
-
-    @api_bp.route('/standards', methods=['GET'])
-    def api_standards_endpoint():
-        """Get supported medical standards information."""
-        return api_standards()
 
     @api_bp.route('/compliance/templates', methods=['GET'])
     def api_templates_endpoint():

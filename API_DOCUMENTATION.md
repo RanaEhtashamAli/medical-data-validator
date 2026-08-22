@@ -7,7 +7,7 @@ The Medical Data Validator API provides comprehensive validation services for he
 ## Base URLs
 ```
 # v1.2 endpoints (recommended)
-https://medical-data-validator-production.up.railway.app/api/v1.2
+https://medical-data-validator-production.up.railway.app/v1.2
 
 # Legacy v1.0 endpoints (backward compatible)
 https://medical-data-validator-production.up.railway.app/api
@@ -21,7 +21,7 @@ Currently, the API operates without authentication for development. For producti
 
 ### 1. Health Check
 
-**GET** `/api/v1.2/health`
+**GET** `/v1.2/health`
 
 Check API status and supported standards.
 
@@ -39,7 +39,7 @@ Check API status and supported standards.
 
 ### 2. Validate JSON Data
 
-**POST** `/api/v1.2/validate/data`
+**POST** `/v1.2/validate/data`
 
 Validate structured JSON data for medical compliance with advanced v1.2 features.
 
@@ -134,7 +134,7 @@ Validate structured JSON data for medical compliance with advanced v1.2 features
 
 ### 3. Validate File Upload
 
-**POST** `/api/v1.2/validate/file`
+**POST** `/v1.2/validate/file`
 
 Upload and validate medical data files (CSV, Excel, JSON, Parquet) with v1.2 compliance features.
 
@@ -157,7 +157,7 @@ Upload and validate medical data files (CSV, Excel, JSON, Parquet) with v1.2 com
 
 ### 4. Compliance Check
 
-**POST** `/api/v1.2/compliance/check`
+**POST** `/v1.2/compliance/check`
 
 Advanced compliance assessment for medical standards with risk assessment.
 
@@ -206,7 +206,7 @@ Advanced compliance assessment for medical standards with risk assessment.
 
 ### 5. Compliance Templates
 
-**GET** `/api/v1.2/compliance/templates`
+**GET** `/v1.2/compliance/templates`
 
 Get available compliance templates.
 
@@ -242,7 +242,7 @@ Get available compliance templates.
 
 ### 6. Data Quality Analytics
 
-**GET** `/api/v1.2/analytics/quality`
+**GET** `/v1.2/analytics/quality`
 
 Get detailed data quality analytics and metrics.
 
@@ -283,7 +283,7 @@ Get detailed data quality analytics and metrics.
 
 ### 7. System Monitoring
 
-**GET** `/api/v1.2/monitoring/status`
+**GET** `/v1.2/monitoring/status`
 
 Get real-time system monitoring and performance metrics.
 
@@ -318,7 +318,7 @@ Get real-time system monitoring and performance metrics.
 
 ### 8. Get Available Profiles
 
-**GET** `/api/v1.2/profiles`
+**GET** `/v1.2/profiles`
 
 Retrieve available validation profiles.
 
@@ -334,7 +334,7 @@ Retrieve available validation profiles.
 
 ### 9. Get Standards Information
 
-**GET** `/api/v1.2/standards`
+**GET** `/v1.2/standards`
 
 Get detailed information about supported medical standards.
 
@@ -434,7 +434,7 @@ The API supports Cross-Origin Resource Sharing (CORS) for web applications:
 
 ```javascript
 // Example CORS request
-fetch('https://medical-data-validator-production.up.railway.app/api/v1.2/validate/data', {
+fetch('https://medical-data-validator-production.up.railway.app/v1.2/validate/data', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -454,7 +454,7 @@ import requests
 
 # Validate data with v1.2 features
 response = requests.post(
-    'https://medical-data-validator-production.up.railway.app/api/v1.2/validate/data',
+    'https://medical-data-validator-production.up.railway.app/v1.2/validate/data',
     json=medical_data,
     params={
         'compliance_template': 'clinical_trials',
@@ -464,12 +464,12 @@ response = requests.post(
 
 # Get analytics
 analytics = requests.get(
-    'https://medical-data-validator-production.up.railway.app/api/v1.2/analytics/quality',
+    'https://medical-data-validator-production.up.railway.app/v1.2/analytics/quality',
     params={'dataset_id': 'dataset_123'}
 ).json()
 
 # Check system status
-status = requests.get('https://medical-data-validator-production.up.railway.app/api/v1.2/monitoring/status').json()
+status = requests.get('https://medical-data-validator-production.up.railway.app/v1.2/monitoring/status').json()
 ```
 
 ### JavaScript/Node.js
@@ -480,7 +480,7 @@ const axios = require('axios');
 // Validate data
 const validateData = async (data) => {
   const response = await axios.post(
-    'https://medical-data-validator-production.up.railway.app/api/v1.2/validate/data',
+    'https://medical-data-validator-production.up.railway.app/v1.2/validate/data',
     data,
     {
       params: {
@@ -494,7 +494,7 @@ const validateData = async (data) => {
 
 // Get compliance templates
 const getTemplates = async () => {
-  const response = await axios.get('https://medical-data-validator-production.up.railway.app/api/v1.2/compliance/templates');
+  const response = await axios.get('https://medical-data-validator-production.up.railway.app/v1.2/compliance/templates');
   return response.data;
 };
 ```
@@ -509,7 +509,7 @@ const data = {
     procedure: ['99213', '93010', '80048']
 };
 
-fetch('https://medical-data-validator-production.up.railway.app/api/v1.2/validate/data', {
+fetch('https://medical-data-validator-production.up.railway.app/v1.2/validate/data', {
     method: 'POST',
     headers: {
         'Content-Type': 'application/json',
@@ -536,7 +536,7 @@ data = {
 }
 
 response = requests.post(
-    'https://medical-data-validator-production.up.railway.app/api/v1.2/validate/data',
+    'https://medical-data-validator-production.up.railway.app/v1.2/validate/data',
     json=data
 )
 
@@ -550,7 +550,7 @@ print(f"Total issues: {result['total_issues']}")
 ```python
 # Get data quality analytics
 response = requests.post(
-    'https://medical-data-validator-production.up.railway.app/api/v1.2/analytics/quality',
+    'https://medical-data-validator-production.up.railway.app/v1.2/analytics/quality',
     json=data
 )
 
@@ -558,7 +558,7 @@ analytics = response.json()
 print(f"Data quality score: {analytics['data_quality_score']}%")
 
 # Get monitoring status
-status = requests.get('https://medical-data-validator-production.up.railway.app/api/v1.2/monitoring/status').json()
+status = requests.get('https://medical-data-validator-production.up.railway.app/v1.2/monitoring/status').json()
 print(f"System health: {status['health']}")
 ```
 
@@ -576,7 +576,7 @@ with open('medical_data.csv', 'rb') as f:
     }
     
     response = requests.post(
-        'https://medical-data-validator-production.up.railway.app/api/v1.2/validate/data',
+        'https://medical-data-validator-production.up.railway.app/v1.2/validate/data',
         files=files,
         data=data
     )
@@ -589,7 +589,7 @@ print(f"File validation successful: {result['success']}")
 
 ```javascript
 // Get available compliance templates
-const response = await axios.get('https://medical-data-validator-production.up.railway.app/api/v1.2/compliance/templates');
+const response = await axios.get('https://medical-data-validator-production.up.railway.app/v1.2/compliance/templates');
 const templates = response.data;
 console.log('Available templates:', templates);
 ```
@@ -620,7 +620,7 @@ print(f"Valid: {result['is_valid']}")
 ```python
 # Same endpoint with enhanced features
 response = requests.post(
-    'https://medical-data-validator-production.up.railway.app/api/v1.2/validate/data',
+    'https://medical-data-validator-production.up.railway.app/v1.2/validate/data',
     json=data
 )
 

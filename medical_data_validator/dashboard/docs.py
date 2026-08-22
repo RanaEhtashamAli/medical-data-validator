@@ -76,17 +76,9 @@ compliance_request_model_v1_2 = api_docs_v1_2.model('ComplianceRequestV1_2', {
 })
 
 compliance_response_model_v1_2 = api_docs_v1_2.model('ComplianceResponseV1_2', {
-    'hipaa_compliant': fields.Boolean(description='HIPAA compliance status'),
-    'gdpr_compliant': fields.Boolean(description='GDPR compliance status'),
-    'fda_21_cfr_part_11_compliant': fields.Boolean(description='FDA 21 CFR Part 11 compliance status'),
-    'icd10_compliant': fields.Boolean(description='ICD-10 compliance status'),
-    'loinc_compliant': fields.Boolean(description='LOINC compliance status'),
-    'cpt_compliant': fields.Boolean(description='CPT compliance status'),
-    'fhir_compliant': fields.Boolean(description='FHIR compliance status'),
-    'omop_compliant': fields.Boolean(description='OMOP compliance status'),
-    'overall_compliance_score': fields.Integer(description='Overall compliance score (0-100)'),
-    'risk_assessment': fields.Nested(risk_assessment_model, description='Risk assessment results'),
-    'details': fields.Raw(description='Detailed compliance information by standard')
+    'success': fields.Boolean(description='Whether the compliance check completed successfully'),
+    'message': fields.String(description='Status message'),
+    'compliance_report': fields.Raw(description='Full v1.2 compliance report: HIPAA/GDPR/FDA/medical-coding breakdown, overall score, risk level, and violations')
 })
 
 compliance_template_model = api_docs_v1_2.model('ComplianceTemplate', {
@@ -168,7 +160,8 @@ validation_response_model = api_docs_legacy.model('ValidationResponse', {
     'info_count': fields.Integer(description='Number of info-level issues'),
     'compliance_report': fields.Raw(description='Compliance report by standard'),
     'issues': fields.List(fields.Raw, description='Detailed validation issues'),
-    'summary': fields.Raw(description='Validation summary statistics')
+    'summary': fields.Raw(description='Validation summary statistics'),
+    'error': fields.String(description='Error message, present only when the request failed')
 })
 
 compliance_request_model = api_docs_legacy.model('ComplianceRequest', {
@@ -184,21 +177,25 @@ compliance_response_model = api_docs_legacy.model('ComplianceResponse', {
     'cpt_compliant': fields.Boolean(description='CPT compliance status'),
     'fhir_compliant': fields.Boolean(description='FHIR compliance status'),
     'omop_compliant': fields.Boolean(description='OMOP compliance status'),
-    'details': fields.Raw(description='Detailed compliance information')
+    'details': fields.Raw(description='Detailed compliance information'),
+    'success': fields.Boolean(description='Request success status, present only when the request failed'),
+    'error': fields.String(description='Error message, present only when the request failed')
 })
 
 health_response_model = api_docs_legacy.model('HealthResponse', {
     'status': fields.String(description='API health status'),
     'version': fields.String(description='API version'),
     'timestamp': fields.String(description='Current timestamp'),
-    'standards_supported': fields.List(fields.String, description='Supported medical standards')
+    'standards_supported': fields.List(fields.String, description='Supported medical standards'),
+    'error': fields.String(description='Error message, present only when the request failed')
 })
 
 profiles_response_model = api_docs_legacy.model('ProfilesResponse', {
     'clinical_trials': fields.String(description='Clinical trial data validation'),
     'ehr': fields.String(description='Electronic health records validation'),
     'imaging': fields.String(description='Medical imaging metadata validation'),
-    'lab': fields.String(description='Laboratory data validation')
+    'lab': fields.String(description='Laboratory data validation'),
+    'error': fields.String(description='Error message, present only when the request failed')
 })
 
 standards_response_model = api_docs_legacy.model('StandardsResponse', {
@@ -208,7 +205,8 @@ standards_response_model = api_docs_legacy.model('StandardsResponse', {
     'icd9': fields.Raw(description='ICD-9 standard information'),
     'ndc': fields.Raw(description='NDC standard information'),
     'fhir': fields.Raw(description='FHIR standard information'),
-    'omop': fields.Raw(description='OMOP standard information')
+    'omop': fields.Raw(description='OMOP standard information'),
+    'error': fields.String(description='Error message, present only when the request failed')
 })
 
 # Define parameter models for v1.2
@@ -412,8 +410,10 @@ class HealthCheckV1_2(Resource):
         from medical_data_validator.dashboard.routes import api_health
         resp = api_health()
         if isinstance(resp, tuple):
-            resp = resp[0]
-        return resp.get_json()
+            resp_obj, status_code = resp[0], resp[1]
+        else:
+            resp_obj, status_code = resp, 200
+        return resp_obj.get_json(), status_code
 
 @api_docs_v1_2.route('/validate/data')
 class ValidateDataV1_2(Resource):
@@ -425,8 +425,10 @@ class ValidateDataV1_2(Resource):
         from medical_data_validator.dashboard.routes import api_validate_data
         resp = api_validate_data()
         if isinstance(resp, tuple):
-            resp = resp[0]
-        return resp.get_json()
+            resp_obj, status_code = resp[0], resp[1]
+        else:
+            resp_obj, status_code = resp, 200
+        return resp_obj.get_json(), status_code
 
 @api_docs_v1_2.route('/validate/file')
 class ValidateFileV1_2(Resource):
@@ -438,8 +440,10 @@ class ValidateFileV1_2(Resource):
         from medical_data_validator.dashboard.routes import api_validate_file
         resp = api_validate_file()
         if isinstance(resp, tuple):
-            resp = resp[0]
-        return resp.get_json()
+            resp_obj, status_code = resp[0], resp[1]
+        else:
+            resp_obj, status_code = resp, 200
+        return resp_obj.get_json(), status_code
 
 @api_docs_v1_2.route('/compliance/check')
 class ComplianceCheckV1_2(Resource):
@@ -448,11 +452,13 @@ class ComplianceCheckV1_2(Resource):
     @api_docs_v1_2.marshal_with(compliance_response_model_v1_2)
     def post(self):
         """Advanced compliance assessment for medical standards with risk assessment."""
-        from medical_data_validator.dashboard.routes import api_compliance_check
-        resp = api_compliance_check()
+        from medical_data_validator.dashboard.routes import api_v1_2_compliance
+        resp = api_v1_2_compliance()
         if isinstance(resp, tuple):
-            resp = resp[0]
-        return resp.get_json()
+            resp_obj, status_code = resp[0], resp[1]
+        else:
+            resp_obj, status_code = resp, 200
+        return resp_obj.get_json(), status_code
 
 @api_docs_v1_2.route('/compliance/templates')
 class ComplianceTemplatesV1_2(Resource):
@@ -463,8 +469,10 @@ class ComplianceTemplatesV1_2(Resource):
         from medical_data_validator.dashboard.routes import api_templates
         resp = api_templates()
         if isinstance(resp, tuple):
-            resp = resp[0]
-        return resp.get_json()
+            resp_obj, status_code = resp[0], resp[1]
+        else:
+            resp_obj, status_code = resp, 200
+        return resp_obj.get_json(), status_code
 
 @api_docs_v1_2.route('/analytics/quality')
 class AnalyticsQualityV1_2(Resource):
@@ -476,8 +484,10 @@ class AnalyticsQualityV1_2(Resource):
         from medical_data_validator.dashboard.routes import api_analytics
         resp = api_analytics()
         if isinstance(resp, tuple):
-            resp = resp[0]
-        return resp.get_json()
+            resp_obj, status_code = resp[0], resp[1]
+        else:
+            resp_obj, status_code = resp, 200
+        return resp_obj.get_json(), status_code
 
 @api_docs_v1_2.route('/monitoring/status')
 class MonitoringStatusV1_2(Resource):
@@ -488,8 +498,10 @@ class MonitoringStatusV1_2(Resource):
         from medical_data_validator.dashboard.routes import api_monitoring_stats
         resp = api_monitoring_stats()
         if isinstance(resp, tuple):
-            resp = resp[0]
-        return resp.get_json()
+            resp_obj, status_code = resp[0], resp[1]
+        else:
+            resp_obj, status_code = resp, 200
+        return resp_obj.get_json(), status_code
 
 @api_docs_v1_2.route('/profiles')
 class ProfilesV1_2(Resource):
@@ -500,8 +512,10 @@ class ProfilesV1_2(Resource):
         from medical_data_validator.dashboard.routes import api_profiles
         resp = api_profiles()
         if isinstance(resp, tuple):
-            resp = resp[0]
-        return resp.get_json()
+            resp_obj, status_code = resp[0], resp[1]
+        else:
+            resp_obj, status_code = resp, 200
+        return resp_obj.get_json(), status_code
 
 @api_docs_v1_2.route('/standards')
 class StandardsV1_2(Resource):
@@ -512,8 +526,10 @@ class StandardsV1_2(Resource):
         from medical_data_validator.dashboard.routes import api_standards
         resp = api_standards()
         if isinstance(resp, tuple):
-            resp = resp[0]
-        return resp.get_json() 
+            resp_obj, status_code = resp[0], resp[1]
+        else:
+            resp_obj, status_code = resp, 200
+        return resp_obj.get_json(), status_code 
 
 @api_docs_legacy.route('/health')
 class HealthCheckLegacy(Resource):
@@ -524,8 +540,10 @@ class HealthCheckLegacy(Resource):
         from medical_data_validator.dashboard.routes import api_health
         resp = api_health()
         if isinstance(resp, tuple):
-            resp = resp[0]
-        return resp.get_json()
+            resp_obj, status_code = resp[0], resp[1]
+        else:
+            resp_obj, status_code = resp, 200
+        return resp_obj.get_json(), status_code
 
 @api_docs_legacy.route('/validate/data')
 class ValidateDataLegacy(Resource):
@@ -537,8 +555,10 @@ class ValidateDataLegacy(Resource):
         from medical_data_validator.dashboard.routes import api_validate_data
         resp = api_validate_data()
         if isinstance(resp, tuple):
-            resp = resp[0]
-        return resp.get_json()
+            resp_obj, status_code = resp[0], resp[1]
+        else:
+            resp_obj, status_code = resp, 200
+        return resp_obj.get_json(), status_code
 
 @api_docs_legacy.route('/validate/file')
 class ValidateFileLegacy(Resource):
@@ -550,8 +570,10 @@ class ValidateFileLegacy(Resource):
         from medical_data_validator.dashboard.routes import api_validate_file
         resp = api_validate_file()
         if isinstance(resp, tuple):
-            resp = resp[0]
-        return resp.get_json()
+            resp_obj, status_code = resp[0], resp[1]
+        else:
+            resp_obj, status_code = resp, 200
+        return resp_obj.get_json(), status_code
 
 @api_docs_legacy.route('/compliance/check')
 class ComplianceCheckLegacy(Resource):
@@ -563,8 +585,10 @@ class ComplianceCheckLegacy(Resource):
         from medical_data_validator.dashboard.routes import api_compliance_check
         resp = api_compliance_check()
         if isinstance(resp, tuple):
-            resp = resp[0]
-        return resp.get_json()
+            resp_obj, status_code = resp[0], resp[1]
+        else:
+            resp_obj, status_code = resp, 200
+        return resp_obj.get_json(), status_code
 
 @api_docs_legacy.route('/profiles')
 class ProfilesLegacy(Resource):
@@ -575,8 +599,10 @@ class ProfilesLegacy(Resource):
         from medical_data_validator.dashboard.routes import api_profiles
         resp = api_profiles()
         if isinstance(resp, tuple):
-            resp = resp[0]
-        return resp.get_json()
+            resp_obj, status_code = resp[0], resp[1]
+        else:
+            resp_obj, status_code = resp, 200
+        return resp_obj.get_json(), status_code
 
 @api_docs_legacy.route('/standards')
 class StandardsLegacy(Resource):
@@ -587,5 +613,7 @@ class StandardsLegacy(Resource):
         from medical_data_validator.dashboard.routes import api_standards
         resp = api_standards()
         if isinstance(resp, tuple):
-            resp = resp[0]
-        return resp.get_json() 
+            resp_obj, status_code = resp[0], resp[1]
+        else:
+            resp_obj, status_code = resp, 200
+        return resp_obj.get_json(), status_code 
