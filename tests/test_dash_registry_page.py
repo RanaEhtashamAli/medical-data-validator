@@ -55,3 +55,66 @@ def test_create_dataset_from_form_rejects_duplicate():
     _create_dataset_from_form('dup-name', '', '')
     ok, message = _create_dataset_from_form('dup-name', '', '')
     assert ok is False
+
+
+def test_list_datasets_table_data_includes_id():
+    from medical_data_validator.dashboard.pages.registry import _create_dataset_from_form, _list_datasets_table_data
+    _create_dataset_from_form('id-check', '', '')
+    rows = _list_datasets_table_data()
+    row = next(r for r in rows if r['name'] == 'id-check')
+    assert row['id']
+
+
+def test_get_dataset_details_found():
+    from medical_data_validator.dashboard.pages.registry import _create_dataset_from_form, _list_datasets_table_data, _get_dataset_details
+    _create_dataset_from_form('lookup-me', 'a description', 'tag1')
+    dataset_id = next(r['id'] for r in _list_datasets_table_data() if r['name'] == 'lookup-me')
+    ok, message, details = _get_dataset_details(dataset_id)
+    assert ok is True
+    assert 'lookup-me' in details
+
+
+def test_get_dataset_details_not_found():
+    from medical_data_validator.dashboard.pages.registry import _get_dataset_details
+    ok, message, details = _get_dataset_details('nonexistent-id')
+    assert ok is False
+    assert 'not found' in message.lower()
+
+
+def test_get_dataset_details_requires_id():
+    from medical_data_validator.dashboard.pages.registry import _get_dataset_details
+    ok, message, details = _get_dataset_details('')
+    assert ok is False
+
+
+def test_update_dataset_from_form_changes_description():
+    from medical_data_validator.dashboard.pages.registry import _create_dataset_from_form, _list_datasets_table_data, _update_dataset_from_form
+    _create_dataset_from_form('update-me', 'old description', '')
+    dataset_id = next(r['id'] for r in _list_datasets_table_data() if r['name'] == 'update-me')
+    ok, message = _update_dataset_from_form(dataset_id, 'new description', '')
+    assert ok is True
+    rows = _list_datasets_table_data()
+    row = next(r for r in rows if r['name'] == 'update-me')
+    assert row['description'] == 'new description'
+
+
+def test_update_dataset_from_form_not_found():
+    from medical_data_validator.dashboard.pages.registry import _update_dataset_from_form
+    ok, message = _update_dataset_from_form('nonexistent-id', 'x', '')
+    assert ok is False
+
+
+def test_delete_dataset_by_id_removes_it():
+    from medical_data_validator.dashboard.pages.registry import _create_dataset_from_form, _list_datasets_table_data, _delete_dataset_by_id
+    _create_dataset_from_form('delete-me', '', '')
+    dataset_id = next(r['id'] for r in _list_datasets_table_data() if r['name'] == 'delete-me')
+    ok, message = _delete_dataset_by_id(dataset_id)
+    assert ok is True
+    rows = _list_datasets_table_data()
+    assert not any(r['name'] == 'delete-me' for r in rows)
+
+
+def test_delete_dataset_by_id_not_found():
+    from medical_data_validator.dashboard.pages.registry import _delete_dataset_by_id
+    ok, message = _delete_dataset_by_id('nonexistent-id')
+    assert ok is False
