@@ -66,3 +66,17 @@ def test_list_audit_log_table_data_respects_limit():
         audit.log_event('validate', username=f'user-{i}', tenant='default')
     rows = _list_audit_log_table_data(limit=2)
     assert len(rows) == 2
+
+
+def test_count_audit_log_matches_number_logged():
+    from medical_data_validator.dashboard.pages.audit import _count_audit_log
+    for i in range(3):
+        audit.log_event('validate', username=f'user-{i}', tenant='default')
+    assert _count_audit_log() == 3
+
+
+def test_count_audit_log_filters_by_tenant():
+    from medical_data_validator.dashboard.pages.audit import _count_audit_log
+    audit.log_event('validate', username='alice', tenant='default')
+    audit.log_event('validate', username='bob', tenant='other-tenant')
+    assert _count_audit_log(tenant='default') == 1
