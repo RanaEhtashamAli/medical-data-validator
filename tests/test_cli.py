@@ -485,5 +485,57 @@ class TestConsolidatedCLI:
         assert callable(benchmark_main)
 
 
+class TestValidatorConfigFlags:
+    def test_range_flag_adds_range_validator(self):
+        from medical_data_validator.cli import create_validator_from_args
+        import argparse
+        args = argparse.Namespace(
+            required_columns=None, column_types=None, detect_phi=False,
+            quality_checks=False, profile=None,
+            range=['age:0:120'], date_column=None, min_date=None, max_date=None,
+            code_column=None,
+        )
+        validator = create_validator_from_args(args)
+        rule_names = [r.name for r in validator.rules]
+        assert 'RangeValidator' in rule_names
+
+    def test_date_column_flag_adds_date_validator(self):
+        from medical_data_validator.cli import create_validator_from_args
+        import argparse
+        args = argparse.Namespace(
+            required_columns=None, column_types=None, detect_phi=False,
+            quality_checks=False, profile=None,
+            range=None, date_column=['visit_date'], min_date='2020-01-01', max_date='2020-12-31',
+            code_column=None,
+        )
+        validator = create_validator_from_args(args)
+        rule_names = [r.name for r in validator.rules]
+        assert 'DateValidator' in rule_names
+
+    def test_code_column_flag_adds_medical_code_validator(self):
+        from medical_data_validator.cli import create_validator_from_args
+        import argparse
+        args = argparse.Namespace(
+            required_columns=None, column_types=None, detect_phi=False,
+            quality_checks=False, profile=None,
+            range=None, date_column=None, min_date=None, max_date=None,
+            code_column=['diagnosis_code:icd10'],
+        )
+        validator = create_validator_from_args(args)
+        rule_names = [r.name for r in validator.rules]
+        assert 'MedicalCodeValidator' in rule_names
+
+    def test_validate_subcommand_accepts_new_flags(self, tmp_path):
+        import subprocess, sys
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("age,diagnosis_code\n150,E11.9\n")
+        result = subprocess.run(
+            [sys.executable, "-m", "medical_data_validator.cli", "validate", str(csv_path),
+             "--range", "age:0:120", "--code-column", "diagnosis_code:icd10", "--format", "summary"],
+            capture_output=True, text=True,
+        )
+        assert "Total Issues" in result.stdout
+
+
 if __name__ == "__main__":
     pytest.main([__file__]) 

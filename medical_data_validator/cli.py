@@ -21,6 +21,8 @@ from . import (
     get_profile,
     list_available_profiles,
     SchemaValidator,
+    RangeValidator,
+    DateValidator,
     PHIDetector,
     DataQualityChecker,
 )
@@ -62,6 +64,30 @@ def create_validator_from_args(args) -> MedicalDataValidator:
     # Add data quality checks
     if getattr(args, 'quality_checks', False):
         validator.add_rule(DataQualityChecker())
+
+    # Add range checks
+    if getattr(args, 'range', None):
+        ranges = {}
+        for spec in args.range:
+            column, min_str, max_str = spec.split(':', 2)
+            ranges[column] = {'min': float(min_str), 'max': float(max_str)}
+        validator.add_rule(RangeValidator(ranges=ranges))
+
+    # Add date column checks
+    if getattr(args, 'date_column', None):
+        validator.add_rule(DateValidator(
+            date_columns=args.date_column,
+            min_date=getattr(args, 'min_date', None),
+            max_date=getattr(args, 'max_date', None),
+        ))
+
+    # Add medical code column checks
+    if getattr(args, 'code_column', None):
+        code_columns = {}
+        for spec in args.code_column:
+            column, standard = spec.split(':', 1)
+            code_columns[column] = standard
+        validator.add_rule(MedicalCodeValidator(code_columns))
 
     # Add profile-based validators
     if getattr(args, 'profile', None):
@@ -226,6 +252,11 @@ Examples:
     validate_parser.add_argument('--profile', choices=list_available_profiles(), help='Use a pre-configured validation profile')
     validate_parser.add_argument('--required-columns', help='Comma-separated list of required columns')
     validate_parser.add_argument('--column-types', help='JSON string specifying column types')
+    validate_parser.add_argument('--range', action='append', metavar='COLUMN:MIN:MAX', help='Numeric range check (repeatable), e.g. --range age:0:120')
+    validate_parser.add_argument('--date-column', action='append', metavar='COLUMN', help='Column to validate as a date (repeatable)')
+    validate_parser.add_argument('--min-date', help='Minimum allowed date, applies to all --date-column columns')
+    validate_parser.add_argument('--max-date', help='Maximum allowed date, applies to all --date-column columns')
+    validate_parser.add_argument('--code-column', action='append', metavar='COLUMN:STANDARD', help='Medical code column check (repeatable), e.g. --code-column diagnosis_code:icd10')
     validate_parser.add_argument('--detect-phi', action='store_true', help='Enable PHI/PII detection')
     validate_parser.add_argument('--quality-checks', action='store_true', help='Enable data quality checks')
     validate_parser.add_argument('--output', help='Output file path for results')
