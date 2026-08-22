@@ -393,7 +393,7 @@ def api_validate_data():
         # Validate data
         logger.debug("Validating data...")
         try:
-            if batch_size:
+            if batch_size and batch_size > 0:
                 cache = _validation_cache if use_cache else None
                 result = BatchValidator(validator, batch_size=batch_size, cache=cache).validate_batches(df)
             else:
@@ -496,7 +496,7 @@ def api_validate_file():
             validator = create_validator(detect_phi, quality_checks, profile, validators_config=validators_config)
 
             # Validate data
-            if batch_size:
+            if batch_size and batch_size > 0:
                 cache = _validation_cache if use_cache else None
                 result = BatchValidator(validator, batch_size=batch_size, cache=cache).validate_batches(data)
             else:

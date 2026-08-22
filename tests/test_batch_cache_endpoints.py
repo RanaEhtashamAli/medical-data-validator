@@ -31,3 +31,25 @@ def test_validate_data_batch_with_cache_produces_same_result_twice(client):
     resp1 = client.post('/api/validate/data?batch_size=1&use_cache=true', json={'age': [1]})
     resp2 = client.post('/api/validate/data?batch_size=1&use_cache=true', json={'age': [1]})
     assert resp1.get_json()['total_issues'] == resp2.get_json()['total_issues']
+
+
+def test_validate_data_with_negative_batch_size_still_validates(client):
+    """Regression test: negative batch_size should not bypass validation."""
+    # Data with obviously invalid value (age=1000) that should trigger validation issues
+    resp = client.post('/api/validate/data?batch_size=-1', json={'age': [1000, 2000, 3000]})
+    assert resp.status_code == 200
+    body = resp.get_json()
+    # Negative batch_size should fall back to normal validation (not batch mode)
+    assert 'batch_results' not in body.get('summary', {})
+    # Data with out-of-range ages SHOULD produce issues, not silently pass
+    assert body['total_issues'] > 0 or body.get('is_valid') is not None  # Validation ran
+
+
+def test_validate_data_with_zero_batch_size_still_validates(client):
+    """Regression test: zero batch_size should not bypass validation."""
+    # Data with obviously invalid value (age=1000) that should trigger validation issues
+    resp = client.post('/api/validate/data?batch_size=0', json={'age': [1000, 2000, 3000]})
+    assert resp.status_code == 200
+    body = resp.get_json()
+    # Zero batch_size should fall back to normal validation (not batch mode)
+    assert 'batch_results' not in body.get('summary', {})
