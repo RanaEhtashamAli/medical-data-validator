@@ -16,6 +16,9 @@ import numpy as np
 
 from .utils import PHI_PATTERNS, convert_numpy_types
 
+from flask import request, jsonify
+import os
+
 class HIPAAComplianceChecker:
     """HIPAA compliance checker for medical data."""
 
@@ -368,11 +371,12 @@ class DataSanitizer:
     def sanitize_data(self, data: pd.DataFrame) -> pd.DataFrame:
         """Sanitize data to remove potentially dangerous content."""
         sanitized_data = data.copy()
-        
+
         for column in sanitized_data.columns:
-            if sanitized_data[column].dtype == 'object':
+            # Handle both 'object' dtype (pandas < 3.0) and 'str' dtype (pandas >= 3.0)
+            if sanitized_data[column].dtype == 'object' or sanitized_data[column].dtype == 'str':
                 sanitized_data[column] = sanitized_data[column].apply(self._sanitize_value)
-        
+
         return sanitized_data
     
     def _sanitize_value(self, value) -> str:
@@ -405,4 +409,75 @@ class DataSanitizer:
         sanitized = filename
         for char in dangerous_chars:
             sanitized = sanitized.replace(char, '_')
-        return sanitized 
+        return sanitized
+
+
+def register_security_routes(app) -> None:
+    """Attach /api/security/* routes to a Flask app."""
+    try:
+        from medical_data_validator.dashboard.routes import dataframe_from_request
+    except ImportError:
+        from .dashboard.routes import dataframe_from_request
+
+    def _load_or_400():
+        """Returns (df, tmp_path) or raises a tuple-carrying ValueError the
+        caller turns into a 400 response."""
+        return dataframe_from_request()
+
+    @app.route('/api/security/hipaa-check', methods=['POST'])
+    def hipaa_check_endpoint():
+        tmp_path = None
+        try:
+            df, tmp_path = _load_or_400()
+            include_samples = request.args.get('include_samples', 'false').lower() == 'true'
+            report = HIPAAComplianceChecker().check_hipaa_compliance(df)
+            if not include_samples:
+                for item in report.get('phi_detected', []):
+                    item['sample_count'] = len(item.pop('sample_values', []))
+            return jsonify(report)
+        except ValueError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 400
+        except Exception as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 500
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+
+    @app.route('/api/security/audit', methods=['POST'])
+    def security_audit_endpoint():
+        tmp_path = None
+        try:
+            df, tmp_path = _load_or_400()
+            result = SecurityAuditor().audit_security(df, file_path=tmp_path)
+            return jsonify(result)
+        except ValueError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 400
+        except Exception as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 500
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+
+    @app.route('/api/security/sanitize', methods=['POST'])
+    def sanitize_endpoint():
+        tmp_path = None
+        try:
+            df, tmp_path = _load_or_400()
+            sanitized = DataSanitizer().sanitize_data(df)
+            return jsonify({'success': True, 'sanitized_data': sanitized.to_dict(orient='records')})
+        except ValueError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 400
+        except Exception as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 500
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass 

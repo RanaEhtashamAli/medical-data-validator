@@ -1125,6 +1125,44 @@ def create_api_blueprint():
 
     return api_bp
 
+def dataframe_from_request():
+    """
+    Load a DataFrame from either a multipart file upload or a raw JSON body,
+    matching the same input contract api_validate_data/api_validate_file use.
+
+    Returns (df, tmp_path). tmp_path is a real temp-file path the caller must
+    os.unlink() when the request was a file upload (so file-path-aware checks
+    like SecurityAuditor's have something real to inspect), or None for a
+    JSON-body request. Raises ValueError with a user-facing message on bad input.
+    """
+    if 'file' in request.files:
+        file = request.files['file']
+        if file.filename == '':
+            raise ValueError("No file selected")
+        allowed_extensions = {'csv', 'xlsx', 'xls', 'json', 'parquet'}
+        if '.' not in file.filename or file.filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
+            raise ValueError("File type not allowed. Supported formats: CSV, Excel, JSON, Parquet")
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file.filename.rsplit('.', 1)[1]}") as tmp_file:
+            file.save(tmp_file.name)
+            tmp_path = tmp_file.name
+        return load_data(tmp_path), tmp_path
+
+    data = request.get_json(silent=True)
+    if not data:
+        raise ValueError("No file or JSON data provided")
+    if isinstance(data, dict):
+        max_length = max(len(v) if isinstance(v, list) else 1 for v in data.values())
+        padded = {}
+        for key, value in data.items():
+            if isinstance(value, list):
+                padded[key] = value + [None] * (max_length - len(value)) if len(value) < max_length else value
+            else:
+                padded[key] = [value] * max_length
+        df = pd.DataFrame(padded)
+    else:
+        df = pd.DataFrame(data)
+    return df, None
+
 def create_validator(detect_phi: bool, quality_checks: bool, profile: str, enable_compliance: bool = True, template: str | None = None, validators_config: Optional[dict] = None) -> MedicalDataValidator:
     """Create a validator with the specified configuration."""
     # Handle profile-based validation
@@ -1181,6 +1219,18 @@ def register_routes(app):
 
     if register_auth_routes:
         register_auth_routes(app)
+
+    # Security routes (/api/security/*)
+    try:
+        from medical_data_validator.security import register_security_routes
+    except ImportError:
+        try:
+            from ..security import register_security_routes
+        except ImportError:
+            register_security_routes = None
+
+    if register_security_routes:
+        register_security_routes(app)
 
     # Audit routes (/api/audit)
     try:
