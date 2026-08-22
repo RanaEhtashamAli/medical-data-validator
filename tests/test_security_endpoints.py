@@ -60,9 +60,90 @@ def test_sanitize_removes_script_tags(client):
     assert body['sanitized_data'][0]['notes'] == 'hello'
 
 
+def test_hipaa_check_file_upload_success_cleans_up_temp_file(client):
+    """Successful (not error-path) file upload to hipaa-check: exercises the
+    happy-path finally-block temp file cleanup, which the existing JSON-body
+    tests for this endpoint never touch (only the parse-error path did)."""
+    tmp_dir = tempfile.gettempdir()
+    before_files = set(os.listdir(tmp_dir))
+
+    data = {'file': (io.BytesIO(b'ssn\n123-45-6789\n'), 'patients.csv')}
+    resp = client.post('/api/security/hipaa-check', data=data, content_type='multipart/form-data')
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body['total_phi_instances'] >= 1
+
+    after_files = set(os.listdir(tmp_dir))
+    assert after_files - before_files == set(), "temp file was not cleaned up after a successful request"
+
+
+def test_sanitize_file_upload_success(client):
+    data = {'file': (io.BytesIO(b'notes\n<script>alert(1)</script>hello\n'), 'notes.csv')}
+    resp = client.post('/api/security/sanitize', data=data, content_type='multipart/form-data')
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body['success'] is True
+    assert body['sanitized_data'][0]['notes'] == 'hello'
+
+
 def test_security_endpoints_reject_no_input(client):
     resp = client.post('/api/security/hipaa-check', data='', content_type='application/json')
     assert resp.status_code == 400
+
+
+def test_security_audit_rejects_no_input(client):
+    resp = client.post('/api/security/audit', data='', content_type='application/json')
+    assert resp.status_code == 400
+    body = resp.get_json()
+    assert body['success'] is False
+    assert 'error' in body
+
+
+def test_sanitize_rejects_no_input(client):
+    resp = client.post('/api/security/sanitize', data='', content_type='application/json')
+    assert resp.status_code == 400
+    body = resp.get_json()
+    assert body['success'] is False
+    assert 'error' in body
+
+
+def _parquet_engine_available():
+    try:
+        import pyarrow  # noqa: F401
+        return True
+    except ImportError:
+        pass
+    try:
+        import fastparquet  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+@pytest.mark.skipif(
+    _parquet_engine_available(),
+    reason="a parquet engine is installed, so reading 'broken.parquet' won't raise",
+)
+@pytest.mark.parametrize(
+    "endpoint",
+    ['/api/security/hipaa-check', '/api/security/audit', '/api/security/sanitize'],
+)
+def test_endpoints_return_500_when_parquet_engine_missing(client, endpoint):
+    """Exercises the generic `except Exception -> 500` branch with a real,
+    unmocked failure: this project declares no parquet engine dependency
+    (pyproject.toml has no pyarrow/fastparquet), yet '.parquet' is in
+    dataframe_from_request's allowed_extensions. Uploading a .parquet file
+    makes load_data() call pd.read_parquet(), which raises ImportError - not
+    a ValueError - so it must fall through to the generic 500 handler rather
+    than the 400 handler.
+    """
+    data = {'file': (io.BytesIO(b'not a real parquet file'), 'broken.parquet')}
+    resp = client.post(endpoint, data=data, content_type='multipart/form-data')
+    assert resp.status_code == 500
+    body = resp.get_json()
+    assert body['success'] is False
+    assert 'error' in body
 
 
 def test_temp_file_cleaned_up_on_parse_error(client):
