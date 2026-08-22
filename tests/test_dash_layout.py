@@ -38,7 +38,7 @@ def test_update_output_with_real_upload_calls_validator():
     df = pd.DataFrame({"ssn": ["123-45-6789", "000-00-0000"], "notes": ["a", "b"]})
     contents, filename = _make_upload_contents(df)
 
-    summary, severity_fig, column_fig, missing_fig, dtype_fig = _run_validation_for_upload(
+    summary, severity_fig, column_fig, missing_fig, dtype_fig, result_dict = _run_validation_for_upload(
         contents, filename, ["phi", "quality"], None
     )
 
@@ -47,3 +47,5 @@ def test_update_output_with_real_upload_calls_validator():
     assert isinstance(severity_fig, dict) and "data" in severity_fig
     for fig in (column_fig, missing_fig, dtype_fig):
         assert fig != {}
+    assert result_dict is not None
+    assert "is_valid" in result_dict

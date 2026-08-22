@@ -2,6 +2,7 @@
 
 import base64
 
+import dash
 import dash_bootstrap_components as dbc
 from dash import dcc, html, Input, Output, State, callback
 
@@ -90,7 +91,15 @@ layout = dbc.Container([
         dbc.Col([
             dcc.Graph(id='dtype-chart')
         ], width=6)
-    ])
+    ]),
+    dbc.Row([
+        dbc.Col([
+            dbc.Button("Download PDF Report", id='download-pdf-btn', className='me-2'),
+            dbc.Button("Download CSV Report", id='download-csv-btn'),
+            dcc.Download(id='download-report'),
+            dcc.Store(id='last-validation-result'),
+        ])
+    ]),
 ], fluid=True)
 
 
@@ -99,7 +108,7 @@ def _run_validation_for_upload(contents, filename, options, profile):
     Extracted from the Dash callback so it's directly testable without a
     running Dash app."""
     if contents is None:
-        return "Upload a file to start validation", {}, {}, {}, {}
+        return "Upload a file to start validation", {}, {}, {}, {}, None
 
     from medical_data_validator.dashboard.routes import create_validator
 
@@ -109,7 +118,7 @@ def _run_validation_for_upload(contents, filename, options, profile):
     try:
         df = dataframe_from_upload_bytes(filename or '', raw_bytes)
     except Exception as exc:
-        return f"Could not parse {filename}: {exc}", {}, {}, {}, {}
+        return f"Could not parse {filename}: {exc}", {}, {}, {}, {}, None
 
     options = options or []
     validator = create_validator(
@@ -136,6 +145,7 @@ def _run_validation_for_upload(contents, filename, options, profile):
         charts.get('column_issues', {}),
         charts.get('missing_values', {}),
         charts.get('data_types', {}),
+        result_dict,
     )
 
 
@@ -144,7 +154,8 @@ def _run_validation_for_upload(contents, filename, options, profile):
      Output('severity-chart', 'figure'),
      Output('column-chart', 'figure'),
      Output('missing-chart', 'figure'),
-     Output('dtype-chart', 'figure')],
+     Output('dtype-chart', 'figure'),
+     Output('last-validation-result', 'data')],
     [Input('upload-data', 'contents')],
     [State('upload-data', 'filename'),
      State('validation-options', 'value'),
@@ -152,3 +163,19 @@ def _run_validation_for_upload(contents, filename, options, profile):
 )
 def update_output(contents, filename, options, profile):
     return _run_validation_for_upload(contents, filename, options, profile)
+
+
+@callback(
+    Output('download-report', 'data'),
+    [Input('download-pdf-btn', 'n_clicks'), Input('download-csv-btn', 'n_clicks')],
+    State('last-validation-result', 'data'),
+    prevent_initial_call=True,
+)
+def _download_report(pdf_clicks, csv_clicks, result_dict):
+    if not result_dict:
+        return dash.no_update
+    from medical_data_validator.reports import generate_pdf_report, generate_csv_report
+    triggered = dash.ctx.triggered_id
+    if triggered == 'download-pdf-btn':
+        return dcc.send_bytes(generate_pdf_report(result_dict), "validation_report.pdf")
+    return dcc.send_string(generate_csv_report(result_dict), "validation_report.csv")
