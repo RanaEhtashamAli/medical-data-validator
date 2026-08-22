@@ -13,6 +13,7 @@
 ## Global Constraints
 
 - `master` is the live default branch (confirmed via `git remote show origin`), not `main` — any branch-targeting fix uses `master`.
+- Correction found during Task 1's implementation: `compliance_report['risk_level']` alone is an unweighted average across HIPAA/GDPR/FDA/ICD-10/LOINC/CPT sub-scores — confirmed empirically that a single critical PHI violation (bare SSN column) dilutes to overall `risk_level: "low"` (`overall_score: 90.0`) once unrelated medical-coding sub-scores trivially score 100. `compliance_risk_level` is therefore computed as the worst of the overall `risk_level` and every individual violation's `severity` (see `_effective_compliance_risk_level` in `core.py`), not read directly off `risk_level`.
 - `is_valid`'s existing meaning (no `"error"`-severity issues) is never changed — compliance risk is surfaced through new, separate fields.
 - Removing duplicate routes never removes a route that has no restx equivalent — verified per-route in Task 5, not assumed.
 - No new charting code for the Dash UI — it reuses `generate_charts()`, the same function `/home` already calls.
