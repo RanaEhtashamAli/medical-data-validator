@@ -118,3 +118,29 @@ def test_delete_dataset_by_id_not_found():
     from medical_data_validator.dashboard.pages.registry import _delete_dataset_by_id
     ok, message = _delete_dataset_by_id('nonexistent-id')
     assert ok is False
+
+
+def test_get_dataset_details_rejects_other_tenant():
+    from medical_data_validator.dashboard.pages.registry import _get_dataset_details
+    other = registry.register_dataset('other-tenants-dataset', tenant='not-default', description='secret')
+    ok, message, details = _get_dataset_details(other['id'])
+    assert ok is False
+    assert 'not found' in message.lower()
+    assert details == ""
+
+
+def test_update_dataset_from_form_rejects_other_tenant():
+    from medical_data_validator.dashboard.pages.registry import _update_dataset_from_form
+    other = registry.register_dataset('other-tenants-update', tenant='not-default', description='original')
+    ok, message = _update_dataset_from_form(other['id'], 'new description', '')
+    assert ok is False
+    unchanged = registry.get_dataset(other['id'])
+    assert unchanged['description'] == 'original'
+
+
+def test_delete_dataset_by_id_rejects_other_tenant():
+    from medical_data_validator.dashboard.pages.registry import _delete_dataset_by_id
+    other = registry.register_dataset('other-tenants-delete', tenant='not-default')
+    ok, message = _delete_dataset_by_id(other['id'])
+    assert ok is False
+    assert registry.get_dataset(other['id']) is not None

@@ -72,6 +72,8 @@ def _get_dataset_details(dataset_id):
     if not dataset_id:
         return False, "Dataset ID is required", ""
     dataset = get_dataset(dataset_id)
+    if dataset is not None and dataset.get('tenant') != DASH_TENANT:
+        dataset = None
     if dataset is None:
         return False, f"Dataset '{dataset_id}' not found", ""
     lines = [f"{key}: {value}" for key, value in dataset.items()]
@@ -82,6 +84,9 @@ def _update_dataset_from_form(dataset_id, description, tags_csv):
     dataset_id = (dataset_id or '').strip()
     if not dataset_id:
         return False, "Dataset ID is required"
+    existing = get_dataset(dataset_id)
+    if existing is None or existing.get('tenant') != DASH_TENANT:
+        return False, f"Dataset '{dataset_id}' not found"
     tags = [t.strip() for t in (tags_csv or '').split(',') if t.strip()] if tags_csv else None
     updated = update_dataset(dataset_id, description=description or None, tags=tags)
     if updated is None:
@@ -93,6 +98,9 @@ def _delete_dataset_by_id(dataset_id):
     dataset_id = (dataset_id or '').strip()
     if not dataset_id:
         return False, "Dataset ID is required"
+    existing = get_dataset(dataset_id)
+    if existing is None or existing.get('tenant') != DASH_TENANT:
+        return False, f"Dataset '{dataset_id}' not found"
     if delete_dataset(dataset_id):
         return True, f"Deleted dataset '{dataset_id}'"
     return False, f"Dataset '{dataset_id}' not found"
