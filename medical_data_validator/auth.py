@@ -149,6 +149,49 @@ def role_required(*required_roles: str):
     return decorator
 
 
+# ── Module-level account functions (Phase B extraction) ──────────────────────
+
+def list_user_accounts() -> List[Dict[str, Any]]:
+    return [
+        {'username': u, 'role': d['role'], 'tenant': d['tenant'], 'active': d['active']}
+        for u, d in _USERS.items()
+    ]
+
+
+def create_user_account(username: str, password: str, role: str = 'read-only', tenant: str = 'default') -> Dict[str, Any]:
+    username = (username or '').strip()
+    if not username or not password:
+        raise ValueError('username and password required')
+    if username in _USERS:
+        raise ValueError('User already exists')
+    if role not in ROLES:
+        raise ValueError(f'role must be one of {ROLES}')
+    _USERS[username] = {
+        'password_hash': _hash_password(password),
+        'role': role,
+        'tenant': tenant,
+        'active': True,
+    }
+    return {'created': username, 'role': role, 'tenant': tenant}
+
+
+def deactivate_user_account(username: str) -> None:
+    if username not in _USERS:
+        raise ValueError('User not found')
+    _USERS[username]['active'] = False
+
+
+def create_tenant_account(tenant_id: str, name: Optional[str] = None) -> Dict[str, Any]:
+    tenant_id = (tenant_id or '').strip()
+    if not tenant_id:
+        raise ValueError('tenant_id required')
+    if tenant_id in _TENANTS:
+        raise ValueError('Tenant already exists')
+    api_key = secrets.token_hex(32)
+    _TENANTS[tenant_id] = {'name': name or tenant_id, 'api_key': api_key}
+    return {'tenant_id': tenant_id, 'api_key': api_key}
+
+
 # ── Auth routes (register with Flask app via register_auth_routes) ────────────
 
 def register_auth_routes(app):
@@ -183,55 +226,40 @@ def register_auth_routes(app):
     @app.route('/api/auth/users', methods=['GET'])
     @role_required('admin')
     def list_users():
-        return jsonify([
-            {'username': u, 'role': d['role'], 'tenant': d['tenant'], 'active': d['active']}
-            for u, d in _USERS.items()
-        ])
+        return jsonify(list_user_accounts())
 
     @app.route('/api/auth/users', methods=['POST'])
     @role_required('admin')
     def create_user():
         data = request.get_json(silent=True) or {}
-        username = data.get('username', '').strip()
-        password = data.get('password', '')
-        role = data.get('role', 'read-only')
-        tenant = data.get('tenant', g.tenant)
-
-        if not username or not password:
-            return jsonify({'error': 'username and password required'}), 400
-        if username in _USERS:
-            return jsonify({'error': 'User already exists'}), 409
-        if role not in ROLES:
-            return jsonify({'error': f'role must be one of {ROLES}'}), 400
-
-        _USERS[username] = {
-            'password_hash': _hash_password(password),
-            'role': role,
-            'tenant': tenant,
-            'active': True,
-        }
-        return jsonify({'created': username, 'role': role, 'tenant': tenant}), 201
+        try:
+            result = create_user_account(
+                data.get('username', ''), data.get('password', ''),
+                role=data.get('role', 'read-only'), tenant=data.get('tenant', g.tenant),
+            )
+            return jsonify(result), 201
+        except ValueError as exc:
+            code = 409 if 'already exists' in str(exc) else 400
+            return jsonify({'error': str(exc)}), code
 
     @app.route('/api/auth/users/<username>', methods=['DELETE'])
     @role_required('admin')
     def deactivate_user(username):
-        if username not in _USERS:
-            return jsonify({'error': 'User not found'}), 404
         if username == g.user:
             return jsonify({'error': 'Cannot deactivate yourself'}), 400
-        _USERS[username]['active'] = False
-        return jsonify({'deactivated': username})
+        try:
+            deactivate_user_account(username)
+            return jsonify({'deactivated': username})
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 404
 
     @app.route('/api/auth/tenants', methods=['POST'])
     @role_required('admin')
     def create_tenant():
         data = request.get_json(silent=True) or {}
-        tenant_id = data.get('tenant_id', '').strip()
-        name = data.get('name', tenant_id)
-        if not tenant_id:
-            return jsonify({'error': 'tenant_id required'}), 400
-        if tenant_id in _TENANTS:
-            return jsonify({'error': 'Tenant already exists'}), 409
-        api_key = secrets.token_hex(32)
-        _TENANTS[tenant_id] = {'name': name, 'api_key': api_key}
-        return jsonify({'tenant_id': tenant_id, 'api_key': api_key}), 201
+        try:
+            result = create_tenant_account(data.get('tenant_id', ''), data.get('name'))
+            return jsonify(result), 201
+        except ValueError as exc:
+            code = 409 if 'already exists' in str(exc) else 400
+            return jsonify({'error': str(exc)}), code
