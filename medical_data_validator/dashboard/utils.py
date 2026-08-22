@@ -2,6 +2,7 @@
 Utility functions for the Medical Data Validator Dashboard.
 """
 
+import io
 import sys
 import os
 from pathlib import Path
@@ -37,6 +38,20 @@ def load_data(file_path: str) -> pd.DataFrame:
         return pd.read_parquet(file_path)
     else:
         raise ValueError(f"Unsupported file format: {path.suffix}")
+
+def dataframe_from_upload_bytes(filename: str, raw_bytes: bytes) -> pd.DataFrame:
+    """Parse an uploaded file's raw bytes into a DataFrame, dispatching on extension."""
+    suffix = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
+    buf = io.BytesIO(raw_bytes)
+    if suffix == 'csv':
+        return pd.read_csv(buf)
+    elif suffix in ('xlsx', 'xls'):
+        return pd.read_excel(buf)
+    elif suffix == 'json':
+        return pd.read_json(buf)
+    else:
+        raise ValueError(f"Unsupported file type: {filename}")
+
 
 def generate_charts(data: pd.DataFrame, result: ValidationResult) -> Dict[str, Any]:
     charts = {}

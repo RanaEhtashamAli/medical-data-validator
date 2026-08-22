@@ -2,8 +2,12 @@
 Dash layout and callbacks for the Medical Data Validator Dashboard.
 """
 
+import base64
+
 import dash_bootstrap_components as dbc
 from dash import dcc, html, Input, Output, State
+
+from .utils import dataframe_from_upload_bytes, generate_charts
 
 def setup_dash_layout(dash_app):
     dash_app.layout = dbc.Container([
@@ -86,6 +90,51 @@ def setup_dash_layout(dash_app):
         ])
     ], fluid=True)
 
+def _run_validation_for_upload(contents, filename, options, profile):
+    """Parse an uploaded file, run validation, and build the 4 chart figures.
+    Extracted from the Dash callback so it's directly testable without a
+    running Dash app."""
+    if contents is None:
+        return "Upload a file to start validation", {}, {}, {}, {}
+
+    from .routes import create_validator
+
+    _header, b64data = contents.split(',', 1)
+    raw_bytes = base64.b64decode(b64data)
+
+    try:
+        df = dataframe_from_upload_bytes(filename or '', raw_bytes)
+    except Exception as exc:
+        return f"Could not parse {filename}: {exc}", {}, {}, {}, {}
+
+    options = options or []
+    validator = create_validator(
+        detect_phi='phi' in options,
+        quality_checks='quality' in options,
+        profile=profile,
+    )
+    result = validator.validate(df)
+    result_dict = result.to_dict()
+
+    summary_lines = [
+        f"Valid: {result_dict['is_valid']}",
+        f"Compliant: {result_dict['is_compliant']}",
+        f"Total issues: {result_dict['total_issues']} "
+        f"(errors: {result_dict['error_count']}, warnings: {result_dict['warning_count']}, "
+        f"info: {result_dict['info_count']})",
+    ]
+    summary = " | ".join(summary_lines)
+
+    charts = generate_charts(df, result)
+    return (
+        summary,
+        charts.get('severity_distribution', {}),
+        charts.get('column_issues', {}),
+        charts.get('missing_values', {}),
+        charts.get('data_types', {}),
+    )
+
+
 def setup_dash_callbacks(dash_app):
     @dash_app.callback(
         [Output('validation-results', 'children'),
@@ -99,7 +148,4 @@ def setup_dash_callbacks(dash_app):
          State('profile-dropdown', 'value')]
     )
     def update_output(contents, filename, options, profile):
-        if contents is None:
-            return "Upload a file to start validation", {}, {}, {}, {}
-        # Placeholder for now
-        return "Validation completed! (Dash integration coming soon)", {}, {}, {}, {} 
+        return _run_validation_for_upload(contents, filename, options, profile) 
