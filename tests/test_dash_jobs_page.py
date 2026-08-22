@@ -58,3 +58,51 @@ def test_submit_job_from_form_rejects_bad_json():
     from medical_data_validator.dashboard.pages.jobs import _submit_job_from_form
     ok, message = _submit_job_from_form('validate', 'not json')
     assert ok is False
+
+
+def test_get_job_detail_found():
+    from medical_data_validator.dashboard.pages.jobs import _submit_job_from_form, _list_jobs_table_data, _get_job_detail
+    _submit_job_from_form('validate', '{"age": [200]}')
+    for _ in range(20):
+        rows = _list_jobs_table_data()
+        if rows and rows[0]['status'] in ('completed', 'failed'):
+            break
+        time.sleep(0.1)
+    job_id = rows[0]['id']
+    ok, message, job = _get_job_detail(job_id)
+    assert ok is True
+    assert job is not None
+    assert job['id'] == job_id
+    assert job['job_type'] == 'validate'
+
+
+def test_get_job_detail_not_found():
+    from medical_data_validator.dashboard.pages.jobs import _get_job_detail
+    ok, message, job = _get_job_detail('nonexistent-id')
+    assert ok is False
+    assert job is None
+    assert 'not found' in message.lower()
+
+
+def test_get_job_detail_requires_id():
+    from medical_data_validator.dashboard.pages.jobs import _get_job_detail
+    ok, message, job = _get_job_detail('')
+    assert ok is False
+    assert job is None
+
+
+def test_get_job_detail_rejects_other_tenant_job():
+    from medical_data_validator.dashboard.pages.jobs import _get_job_detail
+    from medical_data_validator.jobs import submit_job
+
+    other_tenant_job_id = submit_job('validate', {"age": [200]}, tenant='other-tenant', username='someone-else')
+    for _ in range(20):
+        job = jobs.get_job(other_tenant_job_id)
+        if job and job['status'] in ('completed', 'failed'):
+            break
+        time.sleep(0.1)
+
+    ok, message, job = _get_job_detail(other_tenant_job_id)
+    assert ok is False
+    assert job is None
+    assert 'not found' in message.lower()
