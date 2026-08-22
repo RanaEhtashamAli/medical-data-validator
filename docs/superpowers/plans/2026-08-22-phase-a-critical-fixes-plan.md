@@ -146,6 +146,8 @@ git commit -m "Add is_compliant/compliance_risk_level so PHI risk isn't hidden b
 
 **Interfaces:** none new — purely internal logging changes, no signature changes.
 
+**Correction found during implementation:** actually grepping turned up 60+ `print()` sites in `routes.py` alone — far beyond the 3 named functions above, including several in error-handling blocks in `api_compliance_check`, `api_v1_2_compliance`, and the analytics endpoint that also unconditionally leaked full stack traces into JSON error responses regardless of debug mode. Fixed all of them, classified by purpose rather than blanket-converted: verbose tracing → `logger.debug`, genuine errors → `logger.exception`, operational status (monitoring started/stopped, alert created) → `logger.info`. Also discovered `api_validate_data()` builds its own response dict rather than calling `result.to_dict()`, so Task 1's `is_compliant`/`compliance_risk_level` fields never reached that endpoint's response — added them there too while already touching every line of that function.
+
 - [ ] **Step 1: Find every debug print() in the three files**
 
 Run: `grep -n "print(" medical_data_validator/dashboard/routes.py medical_data_validator/monitoring.py medical_data_validator/core.py`
