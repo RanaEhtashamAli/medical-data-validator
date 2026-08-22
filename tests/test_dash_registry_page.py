@@ -2,6 +2,9 @@
 
 import tempfile
 import pytest
+import dash
+from dash._callback_context import context_value
+from dash._utils import AttributeDict
 import medical_data_validator.registry as registry
 
 # dashboard.pages.registry calls dash.register_page() at import time, which
@@ -144,3 +147,145 @@ def test_delete_dataset_by_id_rejects_other_tenant():
     ok, message = _delete_dataset_by_id(other['id'])
     assert ok is False
     assert registry.get_dataset(other['id']) is not None
+
+
+def _set_triggered(component_id):
+    """Make dash.ctx.triggered_id resolve to component_id inside a directly-called callback."""
+    context_value.set(AttributeDict(triggered_inputs=[{'prop_id': f'{component_id}.n_clicks'}]))
+
+
+# --- Fix 1 Part B: Update must not report success on a no-op ---------------
+
+def test_update_dataset_from_form_rejects_blank_both_fields_as_noop():
+    from medical_data_validator.dashboard.pages.registry import (
+        _create_dataset_from_form, _list_datasets_table_data, _update_dataset_from_form,
+    )
+    _create_dataset_from_form('noop-update', 'original description', 'tag1')
+    dataset_id = next(r['id'] for r in _list_datasets_table_data() if r['name'] == 'noop-update')
+    before = registry.get_dataset(dataset_id)
+
+    ok, message = _update_dataset_from_form(dataset_id, '', '')
+
+    assert ok is False
+    assert 'nothing to update' in message.lower()
+    after = registry.get_dataset(dataset_id)
+    assert after['description'] == before['description'] == 'original description'
+    assert after['tags'] == before['tags'] == ['tag1']
+    assert after['updated_at'] == before['updated_at']
+
+
+def test_update_dataset_from_form_accepts_description_only():
+    from medical_data_validator.dashboard.pages.registry import (
+        _create_dataset_from_form, _list_datasets_table_data, _update_dataset_from_form,
+    )
+    _create_dataset_from_form('desc-only-update', 'original', 'tag1')
+    dataset_id = next(r['id'] for r in _list_datasets_table_data() if r['name'] == 'desc-only-update')
+    ok, message = _update_dataset_from_form(dataset_id, 'brand new description', '')
+    assert ok is True
+    assert registry.get_dataset(dataset_id)['description'] == 'brand new description'
+
+
+# --- Fix 1 Part A: View chains into the Update form's inputs ---------------
+
+def test_registry_view_action_populates_description_and_tags_inputs():
+    from medical_data_validator.dashboard.pages.registry import (
+        _handle_registry_actions, _create_dataset_from_form, _list_datasets_table_data,
+    )
+    _create_dataset_from_form('view-chain', 'real description', 'tagA,tagB')
+    dataset_id = next(r['id'] for r in _list_datasets_table_data() if r['name'] == 'view-chain')
+
+    _set_triggered('registry-view-btn')
+    result = _handle_registry_actions(None, None, 1, None, None, None, None, None, dataset_id)
+    _, create_message, lookup_message, details, description_value, tags_value = result
+
+    assert description_value == 'real description'
+    assert tags_value == 'tagA, tagB'
+    assert 'view-chain' in details
+
+
+def test_registry_view_action_on_not_found_does_not_touch_form_inputs():
+    from medical_data_validator.dashboard.pages.registry import _handle_registry_actions
+
+    _set_triggered('registry-view-btn')
+    result = _handle_registry_actions(None, None, 1, None, None, None, None, None, 'nonexistent-id')
+    _, create_message, lookup_message, details, description_value, tags_value = result
+
+    assert description_value is dash.no_update
+    assert tags_value is dash.no_update
+    assert 'not found' in lookup_message.lower()
+
+
+# --- Fix 2: directly test the `_handle_registry_actions` dispatcher --------
+# Each test confirms the RIGHT branch fired and routed its result into the
+# CORRECT Output — this is what would catch a cross-wired routing bug (e.g.
+# the update branch's message landing in create_message instead of
+# lookup_message).
+
+def test_handle_registry_actions_create_routes_to_create_message_only():
+    from medical_data_validator.dashboard.pages.registry import _handle_registry_actions
+
+    _set_triggered('registry-create-btn')
+    _table, create_message, lookup_message, details, description_value, tags_value = \
+        _handle_registry_actions(1, None, None, None, None, 'dispatch-create', 'a description', 'tag1', None)
+
+    assert 'dispatch-create' in create_message
+    assert lookup_message == ""
+    assert details == ""
+    assert description_value is dash.no_update
+    assert tags_value is dash.no_update
+
+
+def test_handle_registry_actions_view_routes_to_lookup_message_and_details_only():
+    from medical_data_validator.dashboard.pages.registry import (
+        _handle_registry_actions, _create_dataset_from_form, _list_datasets_table_data,
+    )
+    _create_dataset_from_form('dispatch-view', 'view description', 'vtag')
+    dataset_id = next(r['id'] for r in _list_datasets_table_data() if r['name'] == 'dispatch-view')
+
+    _set_triggered('registry-view-btn')
+    _table, create_message, lookup_message, details, description_value, tags_value = \
+        _handle_registry_actions(None, None, 1, None, None, None, None, None, dataset_id)
+
+    assert create_message == ""
+    assert lookup_message == ""
+    assert 'dispatch-view' in details
+    assert description_value == 'view description'
+    assert tags_value == 'vtag'
+
+
+def test_handle_registry_actions_update_routes_to_lookup_message_only():
+    from medical_data_validator.dashboard.pages.registry import (
+        _handle_registry_actions, _create_dataset_from_form, _list_datasets_table_data,
+    )
+    _create_dataset_from_form('dispatch-update', 'old description', '')
+    dataset_id = next(r['id'] for r in _list_datasets_table_data() if r['name'] == 'dispatch-update')
+
+    _set_triggered('registry-update-btn')
+    _table, create_message, lookup_message, details, description_value, tags_value = \
+        _handle_registry_actions(None, None, None, 1, None, None, 'new description', '', dataset_id)
+
+    assert create_message == ""
+    assert 'updated' in lookup_message.lower()
+    assert details == ""
+    assert description_value is dash.no_update
+    assert tags_value is dash.no_update
+    assert registry.get_dataset(dataset_id)['description'] == 'new description'
+
+
+def test_handle_registry_actions_delete_routes_to_lookup_message_only():
+    from medical_data_validator.dashboard.pages.registry import (
+        _handle_registry_actions, _create_dataset_from_form, _list_datasets_table_data,
+    )
+    _create_dataset_from_form('dispatch-delete', '', '')
+    dataset_id = next(r['id'] for r in _list_datasets_table_data() if r['name'] == 'dispatch-delete')
+
+    _set_triggered('registry-delete-btn')
+    _table, create_message, lookup_message, details, description_value, tags_value = \
+        _handle_registry_actions(None, None, None, None, 1, None, None, None, dataset_id)
+
+    assert create_message == ""
+    assert 'deleted' in lookup_message.lower()
+    assert details == ""
+    assert description_value is dash.no_update
+    assert tags_value is dash.no_update
+    assert registry.get_dataset(dataset_id) is None

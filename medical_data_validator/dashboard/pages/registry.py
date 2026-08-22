@@ -87,6 +87,8 @@ def _update_dataset_from_form(dataset_id, description, tags_csv):
     existing = get_dataset(dataset_id)
     if existing is None or existing.get('tenant') != DASH_TENANT:
         return False, f"Dataset '{dataset_id}' not found"
+    if not (description or '').strip() and not (tags_csv or '').strip():
+        return False, "Nothing to update — enter a description or tags"
     tags = [t.strip() for t in (tags_csv or '').split(',') if t.strip()] if tags_csv else None
     updated = update_dataset(dataset_id, description=description or None, tags=tags)
     if updated is None:
@@ -108,7 +110,8 @@ def _delete_dataset_by_id(dataset_id):
 
 @callback(
     [Output('registry-table', 'data'), Output('registry-create-message', 'children'),
-     Output('registry-lookup-message', 'children'), Output('registry-details', 'children')],
+     Output('registry-lookup-message', 'children'), Output('registry-details', 'children'),
+     Output('registry-description-input', 'value'), Output('registry-tags-input', 'value')],
     [Input('registry-create-btn', 'n_clicks'), Input('registry-refresh-btn', 'n_clicks'),
      Input('registry-view-btn', 'n_clicks'), Input('registry-update-btn', 'n_clicks'),
      Input('registry-delete-btn', 'n_clicks')],
@@ -124,12 +127,22 @@ def _handle_registry_actions(create_clicks, refresh_clicks, view_clicks, update_
     create_message = ""
     lookup_message = ""
     details = ""
+    # These two only get real values on a successful View — every other
+    # trigger (create/refresh/update/delete) must leave them alone so the
+    # callback doesn't clobber text the user is actively typing.
+    description_value = dash.no_update
+    tags_value = dash.no_update
     if triggered == 'registry-create-btn':
         _ok, create_message = _create_dataset_from_form(name, description, tags_csv)
     elif triggered == 'registry-view-btn':
         _ok, lookup_message, details = _get_dataset_details(lookup_id)
+        if _ok:
+            dataset = get_dataset((lookup_id or '').strip())
+            description_value = dataset.get('description') or ''
+            tags_value = ', '.join(dataset.get('tags') or [])
     elif triggered == 'registry-update-btn':
         _ok, lookup_message = _update_dataset_from_form(lookup_id, description, tags_csv)
     elif triggered == 'registry-delete-btn':
         _ok, lookup_message = _delete_dataset_by_id(lookup_id)
-    return _list_datasets_table_data(), create_message, lookup_message, details
+    return (_list_datasets_table_data(), create_message, lookup_message, details,
+            description_value, tags_value)
