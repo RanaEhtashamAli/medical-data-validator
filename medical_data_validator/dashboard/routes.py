@@ -1145,7 +1145,11 @@ def dataframe_from_request():
         with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file.filename.rsplit('.', 1)[1]}") as tmp_file:
             file.save(tmp_file.name)
             tmp_path = tmp_file.name
-        return load_data(tmp_path), tmp_path
+        try:
+            return load_data(tmp_path), tmp_path
+        except Exception:
+            os.unlink(tmp_path)
+            raise
 
     data = request.get_json(silent=True)
     if not data:

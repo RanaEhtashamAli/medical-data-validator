@@ -1,6 +1,8 @@
 """Tests for the new /api/security/* endpoints (Phase B)."""
 
 import io
+import os
+import tempfile
 import pytest
 from medical_data_validator.dashboard.app import create_dashboard_app
 
@@ -61,3 +63,32 @@ def test_sanitize_removes_script_tags(client):
 def test_security_endpoints_reject_no_input(client):
     resp = client.post('/api/security/hipaa-check', data='', content_type='application/json')
     assert resp.status_code == 400
+
+
+def test_temp_file_cleaned_up_on_parse_error(client):
+    """Regression test: verify temp files are cleaned up when file parsing fails.
+
+    If a file has a valid extension (.csv) but unparseable content (empty),
+    load_data() will raise an exception. The endpoint should return 400,
+    and the temp file should be cleaned up before the error is returned,
+    not leaked for the OS to handle.
+    """
+    # Capture temp dir state before
+    tmp_dir = tempfile.gettempdir()
+    before_files = set(os.listdir(tmp_dir))
+
+    # Upload an empty CSV (valid extension, unparseable content)
+    data = {'file': (io.BytesIO(b''), 'broken.csv')}
+    resp = client.post('/api/security/hipaa-check', data=data, content_type='multipart/form-data')
+
+    # Should return 400 (bad input)
+    assert resp.status_code == 400
+    body = resp.get_json()
+    assert 'error' in body
+
+    # Capture temp dir state after
+    after_files = set(os.listdir(tmp_dir))
+
+    # Verify no new temp files were left behind
+    new_files = after_files - before_files
+    assert len(new_files) == 0, f"Temp files leaked: {new_files}"

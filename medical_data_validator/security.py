@@ -373,7 +373,9 @@ class DataSanitizer:
         sanitized_data = data.copy()
 
         for column in sanitized_data.columns:
-            # Handle both 'object' dtype (pandas < 3.0) and 'str' dtype (pandas >= 3.0)
+            # Handle both 'object' dtype (pandas < 3.0) and 'str' dtype (pandas >= 3.0).
+            # pandas 3.x defaults plain string columns to dtype 'str' (not 'object');
+            # without this branch, sanitize_data() silently no-ops on string data.
             if sanitized_data[column].dtype == 'object' or sanitized_data[column].dtype == 'str':
                 sanitized_data[column] = sanitized_data[column].apply(self._sanitize_value)
 
