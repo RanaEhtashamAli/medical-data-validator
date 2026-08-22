@@ -1,11 +1,11 @@
-"""Dash page: dataset registry (list, create, view run history)."""
+"""Dash page: dataset registry (list, create)."""
 
 import dash
 import dash_bootstrap_components as dbc
-from dash import dcc, html, dash_table, Input, Output, State, callback
+from dash import html, dash_table, Input, Output, State, callback
 
 from medical_data_validator.dashboard.utils import register_page_once
-from medical_data_validator.registry import list_datasets, register_dataset, get_run_history
+from medical_data_validator.registry import list_datasets, register_dataset
 
 register_page_once(__name__, path='/registry', name='Registry')
 

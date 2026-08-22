@@ -1,4 +1,4 @@
-"""Dash page: compliance custom-rules CRUD (list, add, remove)."""
+"""Dash page: compliance custom-rules (list, add)."""
 
 import dash
 import dash_bootstrap_components as dbc

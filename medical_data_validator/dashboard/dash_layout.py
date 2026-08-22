@@ -2,7 +2,6 @@
 
 import dash
 import dash_bootstrap_components as dbc
-from dash import html
 
 
 def setup_dash_layout(dash_app):
