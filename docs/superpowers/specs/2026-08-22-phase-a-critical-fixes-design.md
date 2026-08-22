@@ -66,7 +66,7 @@ No new charting code — `generate_charts()` already returns Plotly-figure-shape
 ### E. Hygiene
 
 - `print()` calls in `routes.py` (`convert_numpy_types`, `api_validate_data`, `convert_validation_issue_to_dict`) and `monitoring.py` (emoji status lines) become `logger.debug(...)` calls on a module-level logger, silenced by default at the standard `INFO` level `api.py` already configures.
-- Delete `.github/workflows/docker-pubish.yml` (typo'd filename, targets `master`); keep `docker-publish.yml` (targets `main`).
+- `master` is confirmed the actual live default branch (both locally and on `origin`), not `main` — corrected after the initial audit's assumption. `docker-pubish.yml` (typo'd filename) has the correct branch target (`master`) but older content (`checkout@v3`, no explicit `permissions` block); `docker-publish.yml` (correct filename) has newer content but targets `main`, which doesn't exist here and so never triggers. Fix: `docker-publish.yml` keeps its filename and newer content, its branch trigger changes to `master`; `docker-pubish.yml` is deleted. Neither "keep the correctly-spelled one as-is" nor "keep the correctly-targeted one as-is" alone is right — the fix needs one workflow with the correct name, the correct branch, and the newer content.
 - Reinstall the package (`pip install -e .`) after the packaging fix lands, so the local install matches source version — verification step, not a code change.
 
 ## Error handling
