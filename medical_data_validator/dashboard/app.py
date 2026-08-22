@@ -16,15 +16,16 @@ import traceback
 from flask import Flask, jsonify, current_app
 import dash
 import dash_bootstrap_components as dbc
+from dash._callback_context import context_value
 from werkzeug.exceptions import HTTPException
 
 try:
     from medical_data_validator.dashboard.routes import register_routes
-    from medical_data_validator.dashboard.dash_layout import setup_dash_layout, setup_dash_callbacks
+    from medical_data_validator.dashboard.dash_layout import setup_dash_layout
 except ImportError:
     # Fallback for relative imports when used as package
     from .routes import register_routes
-    from .dash_layout import setup_dash_layout, setup_dash_callbacks
+    from .dash_layout import setup_dash_layout
 
 logger = logging.getLogger(__name__)
 
@@ -58,15 +59,25 @@ def create_dashboard_app():
             "traceback": traceback.format_exc() if current_app.debug else None,
         }), 500
 
-    # Initialize Dash
+    # Dash's page auto-discovery (use_pages=True below) calls dash.register_page(),
+    # which reads a contextvars.ContextVar that is only ever initialized in the
+    # main thread (dash._callback_context sets it once at import time). A thread
+    # that never touched this ContextVar sees a bare LookupError instead, which
+    # would abort Dash's page registration mid-way and corrupt the global page
+    # registry for the rest of the process. Ensure it's initialized in whichever
+    # thread is constructing this app.
+    if context_value.get(None) is None:
+        context_value.set({})
+
+    # Initialize Dash (multi-page: auto-discovers modules under dashboard/pages/)
     dash_app = dash.Dash(
         __name__,
         server=app,
         url_base_pathname='/dash/',
-        external_stylesheets=[dbc.themes.BOOTSTRAP]
+        external_stylesheets=[dbc.themes.BOOTSTRAP],
+        use_pages=True,
     )
     setup_dash_layout(dash_app)
-    setup_dash_callbacks(dash_app)
 
     return app
 

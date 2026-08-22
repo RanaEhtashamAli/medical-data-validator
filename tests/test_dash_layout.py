@@ -3,6 +3,14 @@
 import base64
 import pandas as pd
 
+# dashboard.pages.validate calls dash.register_page() at import time, which
+# requires dash.Dash(use_pages=True) to have already run at least once in
+# this process (it populates Dash's internal page-registry config). Building
+# the dashboard app here — before importing the page module directly below —
+# lets this test file pass in isolation, not just as part of the full suite.
+from medical_data_validator.dashboard.app import create_dashboard_app
+create_dashboard_app()
+
 
 def _make_upload_contents(df: pd.DataFrame) -> tuple[str, str]:
     csv_bytes = df.to_csv(index=False).encode("utf-8")
@@ -20,13 +28,13 @@ def test_dataframe_from_upload_bytes_parses_csv():
 
 
 def test_update_output_no_upload_returns_placeholder():
-    from medical_data_validator.dashboard.dash_layout import _run_validation_for_upload
+    from medical_data_validator.dashboard.pages.validate import _run_validation_for_upload
     result = _run_validation_for_upload(None, None, ["phi", "quality"], None)
     assert result[0] == "Upload a file to start validation"
 
 
 def test_update_output_with_real_upload_calls_validator():
-    from medical_data_validator.dashboard.dash_layout import _run_validation_for_upload
+    from medical_data_validator.dashboard.pages.validate import _run_validation_for_upload
     df = pd.DataFrame({"ssn": ["123-45-6789", "000-00-0000"], "notes": ["a", "b"]})
     contents, filename = _make_upload_contents(df)
 

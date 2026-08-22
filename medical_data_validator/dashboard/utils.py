@@ -7,6 +7,7 @@ import sys
 import os
 from pathlib import Path
 import pandas as pd
+import dash
 
 # Add the project root to Python path for direct execution
 if __name__ == "__main__":
@@ -25,6 +26,27 @@ try:
 except ImportError:
     # Fallback if plotly is not installed
     px = None
+
+def register_page_once(module_name: str, path: str, name: str, **kwargs) -> None:
+    """Register a Dash page unless a page already claims this path.
+
+    Dash's page auto-loader (dash.Dash(use_pages=True)) imports each file
+    under dashboard/pages/ under a synthesized module name, while this
+    project's tests also import the same file directly by its real dotted
+    path to unit-test helpers defined alongside the page. Both routes
+    execute the module's top-level dash.register_page(...) call, each under
+    a different module name, so calling it unconditionally either raises
+    dash.exceptions.PageError ("can't be called within a callback") or
+    produces two page_registry entries for the same path.
+
+    Guarding on path rather than module name works regardless of which
+    import route ran first, since the two routes never share a module name,
+    and matches how Dash's own router resolves requests: by path
+    (dash._pages._path_to_page), not by which module registered it.
+    """
+    if not any(page.get('path') == path for page in dash.page_registry.values()):
+        dash.register_page(module_name, path=path, name=name, **kwargs)
+
 
 def load_data(file_path: str) -> pd.DataFrame:
     path = Path(file_path)
