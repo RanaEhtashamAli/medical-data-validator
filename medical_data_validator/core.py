@@ -5,12 +5,15 @@ This module provides the main MedicalDataValidator class and supporting
 data structures for validating healthcare datasets.
 """
 
+import logging
 import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 import pandas as pd
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 # Import v1.2 feature modules — fail gracefully but loudly so operators know
 try:
@@ -346,7 +349,7 @@ class MedicalDataValidator:
                 processing_time = time.time() - start_time
                 monitor.record_validation_result(result.to_dict(), processing_time)
             except Exception as e:
-                print(f"Monitoring recording failed: {e}")
+                logger.exception("Monitoring recording failed: %s", e)
 
         # Append immutable audit record (best-effort; never breaks validation)
         if _audit is not None:

@@ -3,6 +3,7 @@ Real-time Monitoring for Medical Data Validator v1.2
 Live data quality tracking and alerting system.
 """
 
+import logging
 import time
 import threading
 from typing import Dict, List, Any, Optional, Callable
@@ -10,6 +11,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from collections import deque
 import json
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class MonitoringAlert:
@@ -68,14 +71,14 @@ class RealTimeMonitor:
             self.monitoring_active = True
             self.monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
             self.monitor_thread.start()
-            print("🔍 Real-time monitoring started")
-    
+            logger.info("Real-time monitoring started")
+
     def stop_monitoring(self) -> None:
         """Stop the monitoring system."""
         self.monitoring_active = False
         if self.monitor_thread:
             self.monitor_thread.join(timeout=5)
-        print("🔍 Real-time monitoring stopped")
+        logger.info("Real-time monitoring stopped")
     
     def record_validation_result(self, result: Dict[str, Any], processing_time: float) -> None:
         """Record a validation result for monitoring."""
@@ -246,7 +249,7 @@ class RealTimeMonitor:
                 )
                 
         except Exception as e:
-            print(f"Monitoring recording failed: {e}")
+            logger.exception("Monitoring recording failed: %s", e)
     
     def _create_alert(self, alert_type: str, severity: str, message: str, details: Dict[str, Any]) -> None:
         """Create a new monitoring alert."""
@@ -268,9 +271,9 @@ class RealTimeMonitor:
             try:
                 self.alert_callback(alert)
             except Exception as e:
-                print(f"Error in alert callback: {e}")
-        
-        print(f"🚨 Alert created: {message} (Severity: {severity})")
+                logger.exception("Error in alert callback: %s", e)
+
+        logger.info("Alert created: %s (Severity: %s)", message, severity)
     
     def acknowledge_alert(self, alert_id: str) -> bool:
         """Acknowledge an alert."""
@@ -363,7 +366,7 @@ class RealTimeMonitor:
                 time.sleep(60)  # Check every minute
                 
             except Exception as e:
-                print(f"Error in monitoring loop: {e}")
+                logger.exception("Error in monitoring loop: %s", e)
                 time.sleep(60)
 
 # Global monitoring instance

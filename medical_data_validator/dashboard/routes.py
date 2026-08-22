@@ -5,6 +5,7 @@ This module provides both UI routes (HTML pages) and API routes (JSON endpoints)
 for the unified Flask application.
 """
 
+import logging
 import os
 import tempfile
 import traceback
@@ -17,6 +18,8 @@ from typing import Dict, List, Optional, Any
 
 import sys
 import os
+
+logger = logging.getLogger(__name__)
 
 # Add the project root to Python path for direct execution
 if __name__ == "__main__":
@@ -38,47 +41,46 @@ except ImportError:
 def convert_numpy_types(obj):
     """Convert numpy types to native Python types for JSON serialization."""
     try:
-        print(f"convert_numpy_types called with: {type(obj)} - {obj}")
-        
+        logger.debug("convert_numpy_types called with: %s - %s", type(obj), obj)
+
         if isinstance(obj, np.ndarray):
             result = obj.tolist()
-            print(f"Converted numpy array to list: {result}")
+            logger.debug("Converted numpy array to list: %s", result)
             return result
         elif isinstance(obj, np.integer):
             result = int(obj)
-            print(f"Converted numpy integer: {result}")
+            logger.debug("Converted numpy integer: %s", result)
             return result
         elif isinstance(obj, np.floating):
             result = float(obj)
-            print(f"Converted numpy float: {result}")
+            logger.debug("Converted numpy float: %s", result)
             return result
         elif isinstance(obj, np.bool_):
             result = bool(obj)
-            print(f"Converted numpy bool: {result}")
+            logger.debug("Converted numpy bool: %s", result)
             return result
         elif isinstance(obj, dict):
-            print(f"Converting dict with {len(obj)} items")
+            logger.debug("Converting dict with %d items", len(obj))
             result = {key: convert_numpy_types(value) for key, value in obj.items()}
-            print(f"Converted dict: {result}")
+            logger.debug("Converted dict: %s", result)
             return result
         elif isinstance(obj, list):
-            print(f"Converting list with {len(obj)} items")
+            logger.debug("Converting list with %d items", len(obj))
             result = [convert_numpy_types(item) for item in obj]
-            print(f"Converted list: {result}")
+            logger.debug("Converted list: %s", result)
             return result
         elif obj is None:
-            print("Converting None")
+            logger.debug("Converting None")
             return None
         elif isinstance(obj, (bool, int, float, str)):
-            print(f"Returning native type: {obj}")
+            logger.debug("Returning native type: %s", obj)
             return obj
         else:
             result = str(obj)
-            print(f"Converting to string: {result}")
+            logger.debug("Converting to string: %s", result)
             return result
     except Exception as e:
-        print(f"ERROR in convert_numpy_types: {e}")
-        print(f"ERROR traceback: {traceback.format_exc()}")
+        logger.exception("Error in convert_numpy_types: %s", e)
         # Fallback: convert to string if conversion fails
         return str(obj)
 
@@ -234,9 +236,8 @@ def generate_compliance_report(data: pd.DataFrame, result: ValidationResult, sta
 def convert_validation_issue_to_dict(issue) -> Dict[str, Any]:
     """Convert ValidationIssue to dictionary."""
     try:
-        print(f"convert_validation_issue_to_dict called with: {type(issue)}")
-        print(f"Issue attributes: {dir(issue)}")
-        
+        logger.debug("convert_validation_issue_to_dict called with: %s", type(issue))
+
         result = {
             "severity": getattr(issue, 'severity', 'unknown'),
             "description": getattr(issue, 'message', str(issue)),
@@ -245,12 +246,11 @@ def convert_validation_issue_to_dict(issue) -> Dict[str, Any]:
             "value": getattr(issue, 'value', None),
             "rule_name": getattr(issue, 'rule_name', None)
         }
-        
-        print(f"Converted issue to dict: {result}")
+
+        logger.debug("Converted issue to dict: %s", result)
         return result
     except Exception as e:
-        print(f"ERROR in convert_validation_issue_to_dict: {e}")
-        print(f"ERROR traceback: {traceback.format_exc()}")
+        logger.exception("Error in convert_validation_issue_to_dict: %s", e)
         return {
             "severity": "error",
             "description": f"Failed to convert issue: {str(e)}",
@@ -286,21 +286,23 @@ def api_health():
 def api_validate_data():
     """Validate JSON data via API."""
     try:
-        print("=== API VALIDATE DATA START ===")
-        
+        logger.debug("=== API VALIDATE DATA START ===")
+
         data = request.get_json()
-        print(f"Received data: {type(data)} - {data}")
-        
+        logger.debug("Received data: %s - %s", type(data), data)
+
         if data is None:
-            print("Data is None - returning 400")
+            logger.debug("Data is None - returning 400")
             return jsonify({"success": False, "error": "Invalid JSON data"}), 400
-        
+
         # Handle empty data gracefully
         if not data:
-            print("Data is empty - returning success response")
+            logger.debug("Data is empty - returning success response")
             return jsonify({
                 "success": True,
                 "is_valid": True,
+                "is_compliant": None,
+                "compliance_risk_level": None,
                 "total_issues": 0,
                 "error_count": 0,
                 "warning_count": 0,
@@ -314,92 +316,92 @@ def api_validate_data():
                     "total_issues": 0
                 }
             })
-        
+
         # Get parameters
         detect_phi = request.args.get('detect_phi', 'true').lower() == 'true'
         quality_checks = request.args.get('quality_checks', 'true').lower() == 'true'
         profile = request.args.get('profile', '')
         standards = request.args.getlist('standards') or ["icd10", "loinc", "cpt"]
-        
-        print(f"Parameters: detect_phi={detect_phi}, quality_checks={quality_checks}, profile='{profile}'")
-        
+
+        logger.debug("Parameters: detect_phi=%s, quality_checks=%s, profile='%s'", detect_phi, quality_checks, profile)
+
         # Convert data to DataFrame
-        print("Converting data to DataFrame...")
+        logger.debug("Converting data to DataFrame...")
         try:
             # Handle arrays of different lengths by padding with None
             if isinstance(data, dict):
                 # Find the maximum length
                 max_length = max(len(value) if isinstance(value, list) else 1 for value in data.values())
-                print(f"Maximum array length: {max_length}")
-                
+                logger.debug("Maximum array length: %d", max_length)
+
                 # Pad shorter arrays with None
                 padded_data = {}
                 for key, value in data.items():
                     if isinstance(value, list):
                         if len(value) < max_length:
                             padded_data[key] = value + [None] * (max_length - len(value))
-                            print(f"Padded {key} from {len(value)} to {max_length} items")
+                            logger.debug("Padded %s from %d to %d items", key, len(value), max_length)
                         else:
                             padded_data[key] = value
                     else:
                         # Convert single values to lists
                         padded_data[key] = [value] * max_length
-                        print(f"Converted {key} single value to list of {max_length} items")
-                
+                        logger.debug("Converted %s single value to list of %d items", key, max_length)
+
                 df = pd.DataFrame(padded_data)
             else:
                 df = pd.DataFrame(data)
-            
-            print(f"DataFrame created: {df.shape} - columns: {list(df.columns)}")
-            print(f"DataFrame dtypes: {df.dtypes.to_dict()}")
-            print(f"DataFrame head: {df.head().to_dict()}")
+
+            logger.debug("DataFrame created: %s - columns: %s", df.shape, list(df.columns))
+            logger.debug("DataFrame dtypes: %s", df.dtypes.to_dict())
         except Exception as e:
-            print(f"ERROR creating DataFrame: {e}")
-            print(f"ERROR traceback: {traceback.format_exc()}")
+            logger.exception("Error creating DataFrame: %s", e)
             return jsonify({
-                "success": False, 
+                "success": False,
                 "error": f"Failed to create DataFrame: {str(e)}",
-                "traceback": traceback.format_exc()
+                "traceback": traceback.format_exc() if current_app.debug else None
             }), 500
-        
+
         # Create validator
-        print("Creating validator...")
+        logger.debug("Creating validator...")
         try:
             validator = create_validator(detect_phi, quality_checks, profile)
-            print(f"Validator created with {len(validator.rules)} rules")
+            logger.debug("Validator created with %d rules", len(validator.rules))
         except Exception as e:
-            print(f"ERROR creating validator: {e}")
-            print(f"ERROR traceback: {traceback.format_exc()}")
+            logger.exception("Error creating validator: %s", e)
             return jsonify({
-                "success": False, 
+                "success": False,
                 "error": f"Failed to create validator: {str(e)}",
-                "traceback": traceback.format_exc()
+                "traceback": traceback.format_exc() if current_app.debug else None
             }), 500
-        
+
         # Validate data
-        print("Validating data...")
+        logger.debug("Validating data...")
         try:
             result = validator.validate(df)
-            print(f"Validation completed: {len(result.issues)} issues found")
+            logger.debug("Validation completed: %d issues found", len(result.issues))
         except Exception as e:
-            print(f"ERROR during validation: {e}")
-            print(f"ERROR traceback: {traceback.format_exc()}")
+            logger.exception("Error during validation: %s", e)
             return jsonify({
-                "success": False, 
+                "success": False,
                 "error": f"Validation failed: {str(e)}",
-                "traceback": traceback.format_exc()
+                "traceback": traceback.format_exc() if current_app.debug else None
             }), 500
-        
+
         # Handle v1.2 compliance if enabled
         if validator.enable_compliance and result.summary.get('compliance_report'):
             compliance_report = result.summary['compliance_report']
         else:
             compliance_report = {}
-        
+
+        result_dict = result.to_dict()
+
         return jsonify({
             "success": True,
             "message": "Validation complete",
             "is_valid": result.is_valid,
+            "is_compliant": result_dict["is_compliant"],
+            "compliance_risk_level": result_dict["compliance_risk_level"],
             "total_issues": len(result.issues),
             "error_count": len([i for i in result.issues if i.severity == 'error']),
             "warning_count": len([i for i in result.issues if i.severity == 'warning']),
@@ -408,12 +410,9 @@ def api_validate_data():
             "summary": result.summary,
             "compliance_report": compliance_report
         })
-        
+
     except Exception as e:
-        print(f"=== API VALIDATE DATA ERROR ===")
-        print(f"Unexpected error: {e}")
-        print(f"Error type: {type(e)}")
-        print(f"Error traceback: {traceback.format_exc()}")
+        logger.exception("Unexpected error in api_validate_data: %s", e)
         return jsonify({
             "success": False,
             "error": f"Unexpected error: {str(e)}",
@@ -544,17 +543,23 @@ def api_compliance_check():
         try:
             validator = create_validator(detect_phi=True, quality_checks=True, profile='')
         except Exception as validator_error:
-            import traceback
-            print(traceback.format_exc())
-            return jsonify({"success": False, "error": f"Failed to create validator: {str(validator_error)}", "traceback": traceback.format_exc()}), 500
+            logger.exception("Failed to create validator: %s", validator_error)
+            return jsonify({
+                "success": False,
+                "error": f"Failed to create validator: {str(validator_error)}",
+                "traceback": traceback.format_exc() if current_app.debug else None,
+            }), 500
         
         # Validate data
         try:
             result = validator.validate(df)
         except Exception as validation_error:
-            import traceback
-            print(traceback.format_exc())
-            return jsonify({"success": False, "error": f"Validation failed: {str(validation_error)}", "traceback": traceback.format_exc()}), 500
+            logger.exception("Validation failed: %s", validation_error)
+            return jsonify({
+                "success": False,
+                "error": f"Validation failed: {str(validation_error)}",
+                "traceback": traceback.format_exc() if current_app.debug else None,
+            }), 500
         
         # Get compliance report from result
         compliance_report = result.summary.get('compliance_report', {})
@@ -588,9 +593,12 @@ def api_compliance_check():
             "details": compliance_report
         })
     except Exception as e:
-        import traceback
-        print(traceback.format_exc())
-        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+        logger.exception("Unhandled error: %s", e)
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc() if current_app.debug else None,
+        }), 500
 
 
 def api_v1_2_compliance():
@@ -637,9 +645,12 @@ def api_v1_2_compliance():
         try:
             validator = create_validator(detect_phi=True, quality_checks=True, profile='', enable_compliance=True, template=template)
         except Exception as validator_error:
-            import traceback
-            print(traceback.format_exc())
-            return jsonify({"success": False, "error": f"Failed to create validator: {str(validator_error)}", "traceback": traceback.format_exc()}), 500
+            logger.exception("Failed to create validator: %s", validator_error)
+            return jsonify({
+                "success": False,
+                "error": f"Failed to create validator: {str(validator_error)}",
+                "traceback": traceback.format_exc() if current_app.debug else None,
+            }), 500
         
         # Apply custom rules from global storage
         if validator.compliance_engine is not None:
@@ -657,9 +668,12 @@ def api_v1_2_compliance():
         try:
             result = validator.validate(df)
         except Exception as validation_error:
-            import traceback
-            print(traceback.format_exc())
-            return jsonify({"success": False, "error": f"Validation failed: {str(validation_error)}", "traceback": traceback.format_exc()}), 500
+            logger.exception("Validation failed: %s", validation_error)
+            return jsonify({
+                "success": False,
+                "error": f"Validation failed: {str(validation_error)}",
+                "traceback": traceback.format_exc() if current_app.debug else None,
+            }), 500
         
         # Get v1.2 compliance report
         compliance_report = result.summary.get('compliance_report', {})
@@ -686,9 +700,12 @@ def api_v1_2_compliance():
             "compliance_report": compliance_report
         })
     except Exception as e:
-        import traceback
-        print(traceback.format_exc())
-        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+        logger.exception("Unhandled error: %s", e)
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc() if current_app.debug else None,
+        }), 500
 
 
 def api_templates():
@@ -842,18 +859,15 @@ def api_analytics():
             try:
                 analytics_report = analytics_engine.comprehensive_analysis(df, time_column)
             except Exception as analytics_error:
-                import traceback
-                print('ERROR in analytics processing:', analytics_error)
-                print(traceback.format_exc())
+                logger.exception("Error in analytics processing: %s", analytics_error)
                 return jsonify({
-                    "success": False, 
+                    "success": False,
                     "error": f"Analytics processing failed: {str(analytics_error)}",
                     "error_type": type(analytics_error).__name__,
-                    "traceback": traceback.format_exc()
+                    "traceback": traceback.format_exc() if current_app.debug else None,
                 }), 500
 
-            # Debug: print analytics_report before serialization
-            print('analytics_report:', analytics_report)
+            logger.debug("analytics_report: %s", analytics_report)
             serialized_report = convert_numpy_types({
                 "success": True,
                 "quality_metrics": analytics_report.get('quality_metrics', {}),
@@ -863,16 +877,14 @@ def api_analytics():
                 "overall_quality_score": analytics_report.get('overall_quality_score', 0.0)
             })
             try:
-                print('serialized_report:', serialized_report)
+                logger.debug("serialized_report: %s", serialized_report)
                 return jsonify(serialized_report)
             except Exception as e:
-                import traceback
-                print('ERROR serializing analytics response:', e)
-                print(traceback.format_exc())
+                logger.exception("Error serializing analytics response: %s", e)
                 return jsonify({
                     "success": False,
                     "error": f"Serialization error: {str(e)}",
-                    "traceback": traceback.format_exc(),
+                    "traceback": traceback.format_exc() if current_app.debug else None,
                     "serialized_report": str(serialized_report)
                 }), 500
         except ImportError as import_error:
@@ -1224,7 +1236,7 @@ def register_routes(app):
         app.register_blueprint(docs_bp)
         create_swagger_api(app)
     except ImportError as e:
-        print(f"Warning: Documentation routes not available: {e}")
+        logger.warning("Documentation routes not available: %s", e)
         # Fallback: create simple docs route
         @app.route('/docs')
         def docs_fallback():
