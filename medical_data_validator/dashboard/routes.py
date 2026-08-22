@@ -1191,13 +1191,45 @@ def dataframe_from_request():
         df = pd.DataFrame(data)
     return df, None
 
+def _apply_validators_config(validator: MedicalDataValidator, validators_config: Optional[dict]) -> None:
+    """Add rules from a validators_config dict (see create_validator's docstring for keys)."""
+    if not validators_config:
+        return
+
+    required_columns = validators_config.get('required_columns')
+    column_types = validators_config.get('column_types')
+    if required_columns or column_types:
+        validator.add_rule(SchemaValidator(required_columns=required_columns, column_types=column_types))
+
+    ranges = validators_config.get('ranges')
+    if ranges:
+        validator.add_rule(RangeValidator(ranges=ranges))
+
+    date_columns = validators_config.get('date_columns')
+    if date_columns:
+        validator.add_rule(DateValidator(
+            date_columns=date_columns,
+            min_date=validators_config.get('min_date'),
+            max_date=validators_config.get('max_date'),
+        ))
+
+    code_columns = validators_config.get('code_columns')
+    if code_columns:
+        validator.add_rule(MedicalCodeValidator(code_columns))
+
+
 def create_validator(detect_phi: bool, quality_checks: bool, profile: str, enable_compliance: bool = True, template: str | None = None, validators_config: Optional[dict] = None) -> MedicalDataValidator:
     """Create a validator with the specified configuration."""
     # Handle profile-based validation
     if profile and profile.strip():  # Check if profile is not empty
         profile_validator = get_profile(profile)
         if profile_validator:
-            return profile_validator.create_validator()
+            validator = profile_validator.create_validator()
+            # A resolved profile still ignores detect_phi/quality_checks/schema
+            # flags (pre-existing behavior, out of scope here), but per-request
+            # validators_config must still apply on top of it.
+            _apply_validators_config(validator, validators_config)
+            return validator
 
     # Create basic validator with compliance support (v1.2) and optional template
     validator = MedicalDataValidator(enable_compliance=enable_compliance, compliance_template=template)
@@ -1210,27 +1242,7 @@ def create_validator(detect_phi: bool, quality_checks: bool, profile: str, enabl
         validator.add_rule(PHIDetector())
 
     # Add rules from per-request validators_config, if provided
-    if validators_config:
-        required_columns = validators_config.get('required_columns')
-        column_types = validators_config.get('column_types')
-        if required_columns or column_types:
-            validator.add_rule(SchemaValidator(required_columns=required_columns, column_types=column_types))
-
-        ranges = validators_config.get('ranges')
-        if ranges:
-            validator.add_rule(RangeValidator(ranges=ranges))
-
-        date_columns = validators_config.get('date_columns')
-        if date_columns:
-            validator.add_rule(DateValidator(
-                date_columns=date_columns,
-                min_date=validators_config.get('min_date'),
-                max_date=validators_config.get('max_date'),
-            ))
-
-        code_columns = validators_config.get('code_columns')
-        if code_columns:
-            validator.add_rule(MedicalCodeValidator(code_columns))
+    _apply_validators_config(validator, validators_config)
 
     return validator
 

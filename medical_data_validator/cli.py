@@ -45,26 +45,8 @@ def load_data(file_path: str) -> pd.DataFrame:
         raise ValueError(f"Unsupported file format: {path.suffix}")
 
 
-def create_validator_from_args(args) -> MedicalDataValidator:
-    """Create a validator based on command line arguments."""
-    validator = MedicalDataValidator()
-
-    # Add schema validation if specified
-    if getattr(args, 'required_columns', None) or getattr(args, 'column_types', None):
-        schema_validator = SchemaValidator(
-            required_columns=args.required_columns.split(',') if args.required_columns else None,
-            column_types=json.loads(args.column_types) if args.column_types else None,
-        )
-        validator.add_rule(schema_validator)
-
-    # Add PHI detection
-    if getattr(args, 'detect_phi', False):
-        validator.add_rule(PHIDetector())
-
-    # Add data quality checks
-    if getattr(args, 'quality_checks', False):
-        validator.add_rule(DataQualityChecker())
-
+def _apply_range_date_code_flags(validator: MedicalDataValidator, args) -> None:
+    """Add rules for --range/--date-column/--code-column flags onto validator."""
     # Add range checks
     if getattr(args, 'range', None):
         ranges = {}
@@ -89,11 +71,40 @@ def create_validator_from_args(args) -> MedicalDataValidator:
             code_columns[column] = standard
         validator.add_rule(MedicalCodeValidator(code_columns))
 
+
+def create_validator_from_args(args) -> MedicalDataValidator:
+    """Create a validator based on command line arguments."""
+    validator = MedicalDataValidator()
+
+    # Add schema validation if specified
+    if getattr(args, 'required_columns', None) or getattr(args, 'column_types', None):
+        schema_validator = SchemaValidator(
+            required_columns=args.required_columns.split(',') if args.required_columns else None,
+            column_types=json.loads(args.column_types) if args.column_types else None,
+        )
+        validator.add_rule(schema_validator)
+
+    # Add PHI detection
+    if getattr(args, 'detect_phi', False):
+        validator.add_rule(PHIDetector())
+
+    # Add data quality checks
+    if getattr(args, 'quality_checks', False):
+        validator.add_rule(DataQualityChecker())
+
+    _apply_range_date_code_flags(validator, args)
+
     # Add profile-based validators
     if getattr(args, 'profile', None):
         profile = get_profile(args.profile)
         if profile:
-            return profile.create_validator()
+            profile_validator = profile.create_validator()
+            # A resolved --profile still ignores --required-columns/
+            # --column-types/--detect-phi/--quality-checks (pre-existing
+            # behavior, out of scope here), but --range/--date-column/
+            # --code-column must still apply on top of it.
+            _apply_range_date_code_flags(profile_validator, args)
+            return profile_validator
         else:
             print(f"Warning: Profile '{args.profile}' not found. Using basic validation.")
 

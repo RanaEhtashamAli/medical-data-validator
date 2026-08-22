@@ -525,6 +525,23 @@ class TestValidatorConfigFlags:
         rule_names = [r.name for r in validator.rules]
         assert 'MedicalCodeValidator' in rule_names
 
+    def test_profile_with_range_flag_still_applies_range_flag(self):
+        """Regression test: a resolved --profile must not silently discard
+        --range/--date-column/--code-column flags (Fix 3). Pre-existing
+        discard of --required-columns/--column-types/--detect-phi/
+        --quality-checks under --profile is out of scope."""
+        from medical_data_validator.cli import create_validator_from_args
+        import argparse
+        args = argparse.Namespace(
+            required_columns=None, column_types=None, detect_phi=False,
+            quality_checks=False, profile='ehr',
+            range=['age:0:120'], date_column=None, min_date=None, max_date=None,
+            code_column=None,
+        )
+        validator = create_validator_from_args(args)
+        rule_names = [r.name for r in validator.rules]
+        assert 'RangeValidator' in rule_names
+
     def test_validate_subcommand_accepts_new_flags(self, tmp_path):
         import subprocess, sys
         csv_path = tmp_path / "data.csv"

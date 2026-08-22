@@ -80,3 +80,16 @@ def test_api_validate_data_rejects_malformed_validators_json():
     with app.test_client() as client:
         resp = client.post('/api/validate/data?validators=not-json', json={'a': [1]})
         assert resp.status_code == 400
+
+
+def test_profile_with_validators_config_still_applies_validators_config():
+    """Regression test: a resolved profile must not silently discard
+    validators_config (Fix 3). detect_phi/quality_checks staying discarded
+    under a profile is pre-existing/out-of-scope, so they're set to False
+    here to isolate the assertion to validators_config only."""
+    validator = create_validator(
+        detect_phi=False, quality_checks=False, profile='ehr',
+        validators_config={'ranges': {'age': {'min': 0, 'max': 120}}},
+    )
+    rule_names = [r.name for r in validator.rules]
+    assert 'RangeValidator' in rule_names
