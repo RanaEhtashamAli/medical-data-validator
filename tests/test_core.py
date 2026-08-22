@@ -200,6 +200,60 @@ class TestValidationResult:
         assert result_dict["issues"][0]["value"] is None
         assert result_dict["issues"][0]["rule_name"] is None
 
+    def test_to_dict_includes_compliance_risk_when_present(self):
+        """is_compliant/compliance_risk_level are derived from the compliance
+        report already stored in summary, not recomputed independently."""
+        result = ValidationResult(is_valid=True)
+        result.summary['compliance_report'] = {'risk_level': 'critical', 'overall_score': 42.0}
+        d = result.to_dict()
+        assert d['compliance_risk_level'] == 'critical'
+        assert d['is_compliant'] is False
+
+    def test_to_dict_is_compliant_true_for_low_risk(self):
+        result = ValidationResult(is_valid=True)
+        result.summary['compliance_report'] = {'risk_level': 'low', 'overall_score': 95.0}
+        d = result.to_dict()
+        assert d['is_compliant'] is True
+
+    def test_to_dict_compliance_fields_none_when_no_report(self):
+        result = ValidationResult(is_valid=True)
+        d = result.to_dict()
+        assert d['compliance_risk_level'] is None
+        assert d['is_compliant'] is None
+
+    def test_bare_ssn_is_valid_true_but_not_compliant(self):
+        """Regression test for the bug that motivated this fix: a bare SSN
+        column must not silently read as fully fine just because is_valid
+        is True."""
+        validator = MedicalDataValidator(enable_compliance=True)
+        validator.add_rule(PHIDetector())
+        df = pd.DataFrame({'ssn': ['123-45-6789', '987-65-4321']})
+        result = validator.validate(df)
+        d = result.to_dict()
+
+        assert d['is_valid'] is True  # unchanged: PHI findings are "warning", not "error"
+        assert d['compliance_risk_level'] in ('high', 'critical')
+        assert d['is_compliant'] is False
+
+    def test_compliance_risk_level_not_diluted_by_unrelated_standards(self):
+        """compliance_report['risk_level'] alone is an unweighted average
+        across HIPAA/GDPR/FDA/ICD-10/LOINC/CPT sub-scores. A dataset with a
+        single critical HIPAA violation (SSN detected) and nothing to check
+        for the other 5 standards averages out to overall risk_level "low"
+        (confirmed empirically: overall_score 90.0 from a critical PHI find),
+        which would silently hide the critical finding. compliance_risk_level
+        must reflect the worst individual violation, not the diluted average."""
+        result = ValidationResult(is_valid=True)
+        result.summary['compliance_report'] = {
+            'risk_level': 'low',  # the diluted overall average
+            'all_violations': [
+                {'standard': 'HIPAA', 'severity': 'critical', 'message': 'SSN pattern detected'},
+            ],
+        }
+        d = result.to_dict()
+        assert d['compliance_risk_level'] == 'critical'
+        assert d['is_compliant'] is False
+
 
 class TestMedicalDataValidator:
     """Test MedicalDataValidator class."""

@@ -36,6 +36,29 @@ except ImportError as _v12_import_error:
     DataAnonymizer = None
 
 
+_RISK_SEVERITY_ORDER = {'low': 0, 'medium': 1, 'high': 2, 'critical': 3}
+
+
+def _effective_compliance_risk_level(compliance_report: Optional[Dict[str, Any]]) -> Optional[str]:
+    """The worst of the report's overall risk_level and any individual
+    violation's severity.
+
+    `compliance_report['risk_level']` alone is an unweighted average across
+    HIPAA/GDPR/FDA/ICD-10/LOINC/CPT sub-scores — a single critical PHI
+    violation (e.g. a bare SSN column) gets diluted to "low" once irrelevant
+    sub-scores (medical coding, when there's no coding data to check) drag
+    the average back up. Taking the max against every individual violation's
+    severity means one critical finding can't be hidden by five unrelated
+    standards trivially scoring 100.
+    """
+    if not compliance_report:
+        return None
+    levels = [compliance_report.get('risk_level', 'low')]
+    for violation in compliance_report.get('all_violations', []):
+        levels.append(violation.get('severity', 'low'))
+    return max(levels, key=lambda lvl: _RISK_SEVERITY_ORDER.get(lvl, 0))
+
+
 @dataclass
 class ValidationIssue:
     """Represents a single validation issue found in the data."""
@@ -74,8 +97,17 @@ class ValidationResult:
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert the validation result to a dictionary."""
+        compliance_report = self.summary.get('compliance_report')
+        compliance_risk_level = _effective_compliance_risk_level(compliance_report)
+        is_compliant = (
+            compliance_risk_level not in ('high', 'critical')
+            if compliance_risk_level is not None
+            else None
+        )
         return {
             "is_valid": self.is_valid,
+            "is_compliant": is_compliant,
+            "compliance_risk_level": compliance_risk_level,
             "total_issues": len(self.issues),
             "error_count": len(self.get_issues_by_severity("error")),
             "warning_count": len(self.get_issues_by_severity("warning")),
