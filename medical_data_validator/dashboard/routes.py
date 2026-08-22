@@ -394,7 +394,10 @@ def api_validate_data():
         logger.debug("Validating data...")
         try:
             if batch_size and batch_size > 0:
-                cache = _validation_cache if use_cache else None
+                # A cache keyed only on rule class names can't distinguish
+                # configured-rule variants (see ValidationCache._make_key),
+                # so configured requests never share the shared cache.
+                cache = _validation_cache if (use_cache and not validators_config) else None
                 result = BatchValidator(validator, batch_size=batch_size, cache=cache).validate_batches(df)
             else:
                 result = validator.validate(df)
@@ -497,7 +500,9 @@ def api_validate_file():
 
             # Validate data
             if batch_size and batch_size > 0:
-                cache = _validation_cache if use_cache else None
+                # See api_validate_data(): configured requests never share
+                # the shared cache, since it's keyed only on rule class names.
+                cache = _validation_cache if (use_cache and not validators_config) else None
                 result = BatchValidator(validator, batch_size=batch_size, cache=cache).validate_batches(data)
             else:
                 result = validator.validate(data)

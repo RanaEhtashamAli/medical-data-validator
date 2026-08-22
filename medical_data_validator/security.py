@@ -16,7 +16,6 @@ import numpy as np
 
 from .utils import PHI_PATTERNS, convert_numpy_types
 
-from flask import request, jsonify
 import os
 
 class HIPAAComplianceChecker:
@@ -416,6 +415,8 @@ class DataSanitizer:
 
 def register_security_routes(app) -> None:
     """Attach /api/security/* routes to a Flask app."""
+    from flask import request, jsonify
+
     try:
         from medical_data_validator.dashboard.routes import dataframe_from_request
     except ImportError:

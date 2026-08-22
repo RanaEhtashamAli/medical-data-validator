@@ -53,3 +53,29 @@ def test_validate_data_with_zero_batch_size_still_validates(client):
     body = resp.get_json()
     # Zero batch_size should fall back to normal validation (not batch mode)
     assert 'batch_results' not in body.get('summary', {})
+
+
+def test_validate_data_with_different_validators_config_are_not_cache_collided(client):
+    """Regression test: two requests with the same data but different
+    validators_config must not share a cache entry keyed only on rule
+    class names (ValidationCache._make_key ignores rule configuration)."""
+    resp1 = client.post(
+        '/api/validate/data?batch_size=1&use_cache=true'
+        '&validators={"ranges":{"age":{"min":0,"max":120}}}',
+        json={'age': [150]},
+    )
+    resp2 = client.post(
+        '/api/validate/data?batch_size=1&use_cache=true'
+        '&validators={"ranges":{"age":{"min":0,"max":500}}}',
+        json={'age': [150]},
+    )
+    body1 = resp1.get_json()
+    body2 = resp2.get_json()
+
+    # First request: age=150 exceeds max=120 -> 1 issue
+    assert body1['total_issues'] == 1
+    assert any('maximum' in i['message'] for i in body1['issues'])
+
+    # Second request: age=150 is within max=500 -> must NOT reuse the
+    # first request's cached (wrong) verdict.
+    assert body2['total_issues'] == 0
