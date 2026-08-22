@@ -1,6 +1,8 @@
 """Tests for the Dash Custom Rules page's extracted callback logic."""
 
 import pytest
+from dash._callback_context import context_value
+from dash._utils import AttributeDict
 from medical_data_validator.dashboard import routes as routes_module
 
 # dashboard.pages.custom_rules calls dash.register_page() at import time,
@@ -61,3 +63,45 @@ def test_remove_custom_rule_from_form_requires_name():
     from medical_data_validator.dashboard.pages.custom_rules import _remove_custom_rule_from_form
     ok, message = _remove_custom_rule_from_form('')
     assert ok is False
+
+
+def _set_triggered(component_id):
+    """Make dash.ctx.triggered_id resolve to component_id inside a directly-called callback."""
+    context_value.set(AttributeDict(triggered_inputs=[{'prop_id': f'{component_id}.n_clicks'}]))
+
+
+# --- Fix 2: directly test the `_handle_rules_actions` dispatcher -----------
+# Confirms add and remove route to their own logic with no cross-talk (e.g.
+# clicking Add doesn't also run the remove branch or vice versa).
+
+def test_handle_rules_actions_add_routes_correctly_and_does_not_remove():
+    from medical_data_validator.dashboard.pages.custom_rules import (
+        _handle_rules_actions, _add_custom_rule_from_form,
+    )
+    _add_custom_rule_from_form('pre-existing-rule', r'\bexisting\b', 'low')
+
+    _set_triggered('rules-add-btn')
+    rows, message = _handle_rules_actions(1, None, None, 'dispatch-add-rule', r'\badd\b', 'high')
+
+    assert 'added' in message.lower()
+    assert any(r['name'] == 'dispatch-add-rule' for r in rows)
+    # The pre-existing rule must still be present — proves the remove branch
+    # (which would have deleted a rule by this same `name` field) never ran.
+    assert any(r['name'] == 'pre-existing-rule' for r in rows)
+
+
+def test_handle_rules_actions_remove_routes_correctly_and_does_not_add():
+    from medical_data_validator.dashboard.pages.custom_rules import (
+        _handle_rules_actions, _add_custom_rule_from_form,
+    )
+    _add_custom_rule_from_form('dispatch-remove-rule', r'\bremove\b', 'medium')
+
+    _set_triggered('rules-remove-btn')
+    rows, message = _handle_rules_actions(
+        None, 1, None, 'dispatch-remove-rule', r'\bshould-not-be-added\b', 'critical')
+
+    assert 'removed' in message.lower()
+    assert not any(r['name'] == 'dispatch-remove-rule' for r in rows)
+    # Proves the add branch (which would use the pattern/severity args) never
+    # ran — no rule was (re-)created from the same form fields.
+    assert not any(r['pattern'] == r'\bshould-not-be-added\b' for r in rows)
