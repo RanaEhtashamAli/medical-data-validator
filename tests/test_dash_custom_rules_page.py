@@ -39,3 +39,25 @@ def test_add_custom_rule_from_form_requires_name_and_pattern():
     from medical_data_validator.dashboard.pages.custom_rules import _add_custom_rule_from_form
     ok, message = _add_custom_rule_from_form('', '', 'medium')
     assert ok is False
+
+
+def test_remove_custom_rule_from_form_removes_it():
+    from medical_data_validator.dashboard.pages.custom_rules import _add_custom_rule_from_form, _remove_custom_rule_from_form, _list_custom_rules_table_data
+    _add_custom_rule_from_form('remove-me', r'\bfax\b', 'medium')
+    ok, message = _remove_custom_rule_from_form('remove-me')
+    assert ok is True
+    rows = _list_custom_rules_table_data()
+    assert not any(r['name'] == 'remove-me' for r in rows)
+
+
+def test_remove_custom_rule_from_form_not_found():
+    from medical_data_validator.dashboard.pages.custom_rules import _remove_custom_rule_from_form
+    ok, message = _remove_custom_rule_from_form('nonexistent-rule')
+    assert ok is False
+    assert 'not found' in message.lower()
+
+
+def test_remove_custom_rule_from_form_requires_name():
+    from medical_data_validator.dashboard.pages.custom_rules import _remove_custom_rule_from_form
+    ok, message = _remove_custom_rule_from_form('')
+    assert ok is False

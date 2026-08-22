@@ -1,4 +1,4 @@
-"""Dash page: compliance custom-rules (list, add)."""
+"""Dash page: compliance custom-rules (list, add, remove)."""
 
 import dash
 import dash_bootstrap_components as dbc
@@ -17,7 +17,8 @@ layout = dbc.Container([
         dbc.Col(dcc.Dropdown(id='rules-severity-dropdown',
                               options=[{'label': s, 'value': s} for s in ('low', 'medium', 'high', 'critical')],
                               value='medium'), width=2),
-        dbc.Col(dbc.Button('Add rule', id='rules-add-btn', color='primary'), width=3),
+        dbc.Col(dbc.Button('Add rule', id='rules-add-btn', color='primary'), width=2),
+        dbc.Col(dbc.Button('Remove', id='rules-remove-btn', color='danger'), width=1),
     ], className='mb-3'),
     html.Div(id='rules-add-message'),
     dash_table.DataTable(id='rules-table', columns=[
@@ -51,16 +52,29 @@ def _add_custom_rule_from_form(name, pattern, severity):
     return True, f"Added rule '{name}'"
 
 
+def _remove_custom_rule_from_form(name):
+    name = (name or '').strip()
+    if not name:
+        return False, "Rule name is required"
+    for i, existing in enumerate(_custom_rules_storage):
+        if existing['name'] == name:
+            _custom_rules_storage.pop(i)
+            return True, f"Removed rule '{name}'"
+    return False, f"Rule '{name}' not found"
+
+
 @callback(
     [Output('rules-table', 'data'), Output('rules-add-message', 'children')],
-    [Input('rules-add-btn', 'n_clicks'), Input('rules-refresh-btn', 'n_clicks')],
+    [Input('rules-add-btn', 'n_clicks'), Input('rules-remove-btn', 'n_clicks'), Input('rules-refresh-btn', 'n_clicks')],
     [State('rules-name-input', 'value'), State('rules-pattern-input', 'value'),
      State('rules-severity-dropdown', 'value')],
     prevent_initial_call=False,
 )
-def _handle_rules_actions(add_clicks, refresh_clicks, name, pattern, severity):
+def _handle_rules_actions(add_clicks, remove_clicks, refresh_clicks, name, pattern, severity):
     triggered = dash.ctx.triggered_id
     message = ""
     if triggered == 'rules-add-btn':
-        ok, message = _add_custom_rule_from_form(name, pattern, severity)
+        _ok, message = _add_custom_rule_from_form(name, pattern, severity)
+    elif triggered == 'rules-remove-btn':
+        _ok, message = _remove_custom_rule_from_form(name)
     return _list_custom_rules_table_data(), message
