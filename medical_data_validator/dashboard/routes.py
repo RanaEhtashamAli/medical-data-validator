@@ -28,13 +28,13 @@ if __name__ == "__main__":
 
 try:
     from medical_data_validator.core import MedicalDataValidator, ValidationResult
-    from medical_data_validator.validators import PHIDetector, DataQualityChecker, MedicalCodeValidator
+    from medical_data_validator.validators import PHIDetector, DataQualityChecker, MedicalCodeValidator, SchemaValidator, RangeValidator, DateValidator
     from medical_data_validator.extensions import get_profile
     from medical_data_validator.dashboard.utils import load_data, generate_charts
 except ImportError:
     # Fallback for relative imports when used as package
     from ..core import MedicalDataValidator, ValidationResult
-    from ..validators import PHIDetector, DataQualityChecker, MedicalCodeValidator
+    from ..validators import PHIDetector, DataQualityChecker, MedicalCodeValidator, SchemaValidator, RangeValidator, DateValidator
     from ..extensions import get_profile
     from .utils import load_data, generate_charts
 
@@ -323,6 +323,13 @@ def api_validate_data():
         profile = request.args.get('profile', '')
         standards = request.args.getlist('standards') or ["icd10", "loinc", "cpt"]
 
+        validators_config = None
+        if request.args.get('validators'):
+            try:
+                validators_config = json.loads(request.args.get('validators'))
+            except (TypeError, ValueError) as e:
+                return jsonify({"success": False, "error": f"Invalid 'validators' JSON: {e}"}), 400
+
         logger.debug("Parameters: detect_phi=%s, quality_checks=%s, profile='%s'", detect_phi, quality_checks, profile)
 
         # Convert data to DataFrame
@@ -365,7 +372,7 @@ def api_validate_data():
         # Create validator
         logger.debug("Creating validator...")
         try:
-            validator = create_validator(detect_phi, quality_checks, profile)
+            validator = create_validator(detect_phi, quality_checks, profile, validators_config=validators_config)
             logger.debug("Validator created with %d rules", len(validator.rules))
         except Exception as e:
             logger.exception("Error creating validator: %s", e)
@@ -453,7 +460,14 @@ def api_validate_file():
         quality_checks = request.form.get('quality_checks', 'true').lower() == 'true'
         profile = request.form.get('profile', '')
         standards = request.form.getlist('standards') or ["icd10", "loinc", "cpt"]
-        
+
+        validators_config = None
+        if request.form.get('validators'):
+            try:
+                validators_config = json.loads(request.form.get('validators'))
+            except (TypeError, ValueError) as e:
+                return jsonify({"success": False, "error": f"Invalid 'validators' JSON: {e}"}), 400
+
         # Save file temporarily
         with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file.filename.rsplit('.', 1)[1]}") as tmp_file:
             file.save(tmp_file.name)
@@ -462,10 +476,10 @@ def api_validate_file():
         try:
             # Load data
             data = load_data(tmp_path)
-            
+
             # Create validator
-            validator = create_validator(detect_phi, quality_checks, profile)
-            
+            validator = create_validator(detect_phi, quality_checks, profile, validators_config=validators_config)
+
             # Validate data
             result = validator.validate(data)
             
@@ -1111,27 +1125,47 @@ def create_api_blueprint():
 
     return api_bp
 
-def create_validator(detect_phi: bool, quality_checks: bool, profile: str, enable_compliance: bool = True, template: str | None = None) -> MedicalDataValidator:
+def create_validator(detect_phi: bool, quality_checks: bool, profile: str, enable_compliance: bool = True, template: str | None = None, validators_config: Optional[dict] = None) -> MedicalDataValidator:
     """Create a validator with the specified configuration."""
     # Handle profile-based validation
     if profile and profile.strip():  # Check if profile is not empty
         profile_validator = get_profile(profile)
         if profile_validator:
             return profile_validator.create_validator()
-    
+
     # Create basic validator with compliance support (v1.2) and optional template
     validator = MedicalDataValidator(enable_compliance=enable_compliance, compliance_template=template)
-    
+
     # Always add basic quality checks to ensure we have some validation
     validator.add_rule(DataQualityChecker())
-    
+
     # Add optional rules based on user selection
     if detect_phi:
         validator.add_rule(PHIDetector())
-    
-    # Note: quality_checks is now always True since we add DataQualityChecker above
-    # This ensures we always have some validation happening
-    
+
+    # Add rules from per-request validators_config, if provided
+    if validators_config:
+        required_columns = validators_config.get('required_columns')
+        column_types = validators_config.get('column_types')
+        if required_columns or column_types:
+            validator.add_rule(SchemaValidator(required_columns=required_columns, column_types=column_types))
+
+        ranges = validators_config.get('ranges')
+        if ranges:
+            validator.add_rule(RangeValidator(ranges=ranges))
+
+        date_columns = validators_config.get('date_columns')
+        if date_columns:
+            validator.add_rule(DateValidator(
+                date_columns=date_columns,
+                min_date=validators_config.get('min_date'),
+                max_date=validators_config.get('max_date'),
+            ))
+
+        code_columns = validators_config.get('code_columns')
+        if code_columns:
+            validator.add_rule(MedicalCodeValidator(code_columns))
+
     return validator
 
 def register_routes(app):
