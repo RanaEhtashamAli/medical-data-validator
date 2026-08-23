@@ -18,6 +18,7 @@ import dash
 import dash_bootstrap_components as dbc
 from dash._callback_context import context_value
 from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 try:
     from medical_data_validator.dashboard.routes import register_routes
@@ -32,6 +33,10 @@ logger = logging.getLogger(__name__)
 
 def create_dashboard_app():
     app = Flask(__name__)
+    # Behind Railway's (or any) HTTPS-terminating reverse proxy, Flask would
+    # otherwise see plain-HTTP requests and generate http:// redirect/absolute
+    # URLs (e.g. the /docs -> /docs/ redirect), forcing an extra downgrade hop.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
     secret_key = os.environ.get('SECRET_KEY')
     if not secret_key:
         if os.environ.get('FLASK_ENV') == 'production':

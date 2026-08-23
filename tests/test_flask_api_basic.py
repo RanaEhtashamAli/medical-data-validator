@@ -1,5 +1,6 @@
 import pytest
 from flask import Flask
+from medical_data_validator import __version__
 from medical_data_validator.dashboard.app import create_dashboard_app
 
 @pytest.fixture(scope="module")
@@ -14,7 +15,7 @@ def test_api_root(client):
     assert resp.status_code == 200
     data = resp.get_json()
     assert data["message"] == "Medical Data Validator API"
-    assert data["version"] == "0.1.0"
+    assert data["version"] == __version__
     assert "developer" in data
 
 def test_api_health(client):
@@ -22,7 +23,7 @@ def test_api_health(client):
     assert resp.status_code == 200
     data = resp.get_json()
     assert data["status"] == "healthy"
-    assert data["version"] == "0.1.0"
+    assert data["version"] == __version__
     assert "timestamp" in data
     assert "standards_supported" in data
     assert isinstance(data["standards_supported"], list)

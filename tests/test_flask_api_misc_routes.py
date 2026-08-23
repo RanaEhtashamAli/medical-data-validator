@@ -42,6 +42,7 @@ from medical_data_validator.dashboard.routes import (
 )
 from medical_data_validator.core import MedicalDataValidator, ValidationIssue, ValidationResult
 import medical_data_validator.core as core_module
+from medical_data_validator import __version__
 
 
 @pytest.fixture(scope="module")
@@ -67,7 +68,7 @@ class TestTrivialRoutes:
         assert resp.status_code == 200
         body = resp.get_json()
         assert body['status'] == 'healthy'
-        assert body['version'] == '0.1.0'
+        assert body['version'] == __version__
         assert 'timestamp' in body
         # Unlike /api/health, the legacy endpoint has no standards_supported key.
         assert 'standards_supported' not in body

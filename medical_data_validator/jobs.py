@@ -41,8 +41,8 @@ _conn: Optional[sqlite3.Connection] = None
 def _get_conn() -> sqlite3.Connection:
     global _conn
     if _conn is None:
-        os.makedirs(os.path.dirname(JOBS_DB_PATH), exist_ok=True)
-        _conn = sqlite3.connect(JOBS_DB_PATH, check_same_thread=False)
+        from ._sqlite_store import connect
+        _conn = connect(JOBS_DB_PATH, 'jobs.db')
         _conn.row_factory = sqlite3.Row
         _init_schema(_conn)
     return _conn

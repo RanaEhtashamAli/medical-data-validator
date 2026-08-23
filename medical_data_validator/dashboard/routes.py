@@ -27,6 +27,7 @@ if __name__ == "__main__":
     sys.path.insert(0, project_root)
 
 try:
+    from medical_data_validator import __version__
     from medical_data_validator.core import MedicalDataValidator, ValidationResult
     from medical_data_validator.validators import PHIDetector, DataQualityChecker, MedicalCodeValidator, SchemaValidator, RangeValidator, DateValidator
     from medical_data_validator.extensions import get_profile
@@ -34,6 +35,7 @@ try:
     from medical_data_validator.performance import BatchValidator, ValidationCache
 except ImportError:
     # Fallback for relative imports when used as package
+    from .. import __version__
     from ..core import MedicalDataValidator, ValidationResult
     from ..validators import PHIDetector, DataQualityChecker, MedicalCodeValidator, SchemaValidator, RangeValidator, DateValidator
     from ..extensions import get_profile
@@ -271,7 +273,7 @@ def api_root():
     """Root API endpoint with information."""
     return jsonify({
         "message": "Medical Data Validator API",
-        "version": "0.1.0",
+        "version": __version__,
         "developer": "Rana Ehtasham Ali",
         "documentation": "/docs",
         "health": "/api/health"
@@ -282,7 +284,7 @@ def api_health():
     """Health check endpoint for monitoring."""
     return jsonify({
         'status': 'healthy',
-        'version': '0.1.0',
+        'version': __version__,
         'timestamp': pd.Timestamp.now().isoformat(),
         'standards_supported': ["icd10", "loinc", "cpt", "icd9", "ndc", "fhir", "omop"]
     })
@@ -1362,7 +1364,7 @@ def register_routes(app):
         return jsonify({
             'status': 'healthy',
             'timestamp': pd.Timestamp.now().isoformat(),
-            'version': '0.1.0'
+            'version': __version__
         })
 
     # Legacy upload endpoint (for backward compatibility)
