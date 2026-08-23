@@ -1,12 +1,5 @@
 """Tests for the Dash Security page's extracted callback logic."""
 
-import base64
-
-import dash
-import pytest
-from dash._callback_context import context_value
-from dash._utils import AttributeDict
-
 # dashboard.pages.security calls dash.register_page() at import time, which
 # requires dash.Dash(use_pages=True) to have already run at least once in
 # this process (it populates Dash's internal page-registry config). Building
@@ -17,20 +10,10 @@ from dash._utils import AttributeDict
 from medical_data_validator.dashboard.app import create_dashboard_app
 create_dashboard_app()
 
-
-def _make_upload_contents(raw_bytes: bytes, mime: str = 'text/csv') -> str:
-    """Build a dcc.Upload-style 'contents' string: 'data:<mime>;base64,<b64>'."""
-    encoded = base64.b64encode(raw_bytes).decode()
-    return f"data:{mime};base64,{encoded}"
-
+from tests.conftest import _make_upload_contents, _set_triggered
 
 SSN_CSV = b"patient_id,ssn\n1,123-45-6789\n2,987-65-4321\n"
 SCRIPT_CSV = b"notes\n<script>alert(1)</script>hello\n"
-
-
-def _set_triggered(component_id):
-    """Make dash.ctx.triggered_id resolve to component_id inside a directly-called callback."""
-    context_value.set(AttributeDict(triggered_inputs=[{'prop_id': f'{component_id}.n_clicks'}]))
 
 
 def test_run_hipaa_check_from_upload_detects_ssn():
@@ -120,9 +103,10 @@ def test_handle_security_actions_hipaa_routes_correctly_and_does_not_audit_or_sa
     assert 'Security score' not in text
     # Proves the sanitize branch never ran (its summary text is distinct).
     assert 'Sanitized' not in text
-    # The sanitize store is only populated by the sanitize branch — the
-    # HIPAA branch must leave it as dash.no_update.
-    assert store_data is dash.no_update
+    # I4: the HIPAA branch must clear the sanitize-download store (not leave
+    # it as dash.no_update), so a prior sanitize run's data can never be
+    # served by the download button after a HIPAA check on a different file.
+    assert store_data is None
 
 
 def test_handle_security_actions_audit_routes_correctly_and_does_not_hipaa_or_sanitize():
@@ -130,12 +114,14 @@ def test_handle_security_actions_audit_routes_correctly_and_does_not_hipaa_or_sa
     contents = _make_upload_contents(SSN_CSV)
 
     _set_triggered('security-audit-btn')
-    children, _store_data = _handle_security_actions(None, 1, None, contents, 'patients.csv', False)
+    children, store_data = _handle_security_actions(None, 1, None, contents, 'patients.csv', False)
 
     text = _flatten_text(children)
     assert 'Security score' in text
     assert 'Compliance score' not in text
     assert 'Sanitized' not in text
+    # I4: same rationale as the HIPAA branch above.
+    assert store_data is None
 
 
 def test_handle_security_actions_sanitize_routes_correctly_and_does_not_hipaa_or_audit():
@@ -150,3 +136,20 @@ def test_handle_security_actions_sanitize_routes_correctly_and_does_not_hipaa_or
     assert 'Compliance score' not in text
     assert 'Security score' not in text
     assert store_data[0]['notes'] == 'hello'
+
+
+def test_sanitize_then_hipaa_check_clears_the_sanitize_download_store():
+    """I4 regression: a user who sanitizes file A, then runs a HIPAA check on
+    file B, must not be left with a 'Download sanitized CSV' button that
+    still serves file A's data."""
+    from medical_data_validator.dashboard.pages.security import _handle_security_actions
+
+    _set_triggered('security-sanitize-btn')
+    _children, store_data = _handle_security_actions(
+        None, None, 1, _make_upload_contents(SCRIPT_CSV), 'notes.csv', False)
+    assert store_data[0]['notes'] == 'hello'
+
+    _set_triggered('security-hipaa-btn')
+    _children, store_data = _handle_security_actions(
+        1, None, None, _make_upload_contents(SSN_CSV), 'patients.csv', False)
+    assert store_data is None

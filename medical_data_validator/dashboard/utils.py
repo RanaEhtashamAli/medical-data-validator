@@ -2,6 +2,7 @@
 Utility functions for the Medical Data Validator Dashboard.
 """
 
+import base64
 import io
 import sys
 import os
@@ -73,6 +74,31 @@ def dataframe_from_upload_bytes(filename: str, raw_bytes: bytes) -> pd.DataFrame
         return pd.read_json(buf)
     else:
         raise ValueError(f"Unsupported file type: {filename}")
+
+
+def decode_upload_to_dataframe(contents: str, filename: str) -> pd.DataFrame:
+    """Decode a dcc.Upload contents string into a DataFrame. Raises on
+    missing upload or an unparseable/unsupported file — callers turn this
+    into an inline error message rather than letting the callback crash.
+
+    Shared by every Dash page's upload-decode step (previously copy-pasted
+    identically across pages/security.py, pages/anonymize.py,
+    pages/compliance.py, and pages/validate.py, plus a differently-shaped
+    inline copy in pages/analytics.py).
+    """
+    if contents is None:
+        raise ValueError("Upload a file first")
+    _header, b64data = contents.split(',', 1)
+    raw_bytes = base64.b64decode(b64data)
+    return dataframe_from_upload_bytes(filename or '', raw_bytes)
+
+
+def _is_error(result) -> bool:
+    """True if `result` is the `{'error': ...}` sentinel dict convention used
+    by several Dash pages' upload-processing helpers. Shared by
+    pages/security.py, pages/analytics.py, and pages/compliance.py (each
+    used to define this identically)."""
+    return isinstance(result, dict) and 'error' in result
 
 
 def generate_charts(data: pd.DataFrame, result: ValidationResult) -> Dict[str, Any]:

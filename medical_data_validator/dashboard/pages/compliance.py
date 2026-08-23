@@ -11,7 +11,6 @@ dashboard/pages/jobs.py's JSON-Textarea + try/except pattern for the
 structurally-nested 'rules' field.
 """
 
-import base64
 import json
 
 import dash
@@ -19,17 +18,19 @@ import dash_bootstrap_components as dbc
 from dash import dcc, html, dash_table, Input, Output, State, callback
 
 from medical_data_validator.dashboard.routes import (
-    _BUILTIN_COMPLIANCE_TEMPLATE_NAMES,
+    _builtin_compliance_template_names,
     _delete_custom_template,
     _list_custom_templates,
     _upsert_custom_template,
     build_v1_2_compliance_report,
+    normalize_custom_template_rules,
+    plugin_info_rows,
 )
 from medical_data_validator.dashboard.utils import (
-    dataframe_from_upload_bytes,
+    _is_error,
+    decode_upload_to_dataframe,
     register_page_once,
 )
-from medical_data_validator.plugins import discover_plugins
 
 register_page_once(__name__, path='/compliance', name='Compliance')
 
@@ -42,7 +43,16 @@ _REPORT_BOOKKEEPING_KEYS = {
 }
 
 layout = dbc.Container([
-    html.H1("Compliance", className="mb-4"),
+    dbc.Row([
+        dbc.Col([
+            html.H1("Compliance", className="text-center mb-4"),
+            html.P(
+                "Run v1.2 compliance reports, manage custom compliance templates, "
+                "and view discovered compliance plugins",
+                className="text-center"
+            )
+        ])
+    ]),
 
     # --- 1. v1.2 compliance report runner ---------------------------------
     html.H3("Run Compliance Report"),
@@ -88,25 +98,25 @@ layout = dbc.Container([
     # --- 2. Custom compliance templates CRUD ------------------------------
     html.H3("Custom Compliance Templates"),
     dbc.Row([
-        dbc.Col(dbc.Input(id='tmpl-name-input', placeholder='Template name'), width=3),
-        dbc.Col(dbc.Input(id='tmpl-description-input', placeholder='Description (optional)'), width=3),
+        dbc.Col(dbc.Input(id='compliance-tmpl-name-input', placeholder='Template name'), width=3),
+        dbc.Col(dbc.Input(id='compliance-tmpl-description-input', placeholder='Description (optional)'), width=3),
         dbc.Col(dbc.Textarea(
-            id='tmpl-rules-input',
+            id='compliance-tmpl-rules-input',
             placeholder='[{"name":"...","pattern":"...","severity":"medium"}]',
         ), width=4),
-        dbc.Col(dbc.Button('Save template', id='tmpl-save-btn', color='primary'), width=2),
+        dbc.Col(dbc.Button('Save template', id='compliance-tmpl-save-btn', color='primary'), width=2),
     ], className='mb-3'),
     dbc.Row([
-        dbc.Col(dbc.Input(id='tmpl-delete-name-input', placeholder='Template name to delete'), width=4),
-        dbc.Col(dbc.Button('Delete', id='tmpl-delete-btn', color='danger'), width=2),
+        dbc.Col(dbc.Input(id='compliance-tmpl-delete-name-input', placeholder='Template name to delete'), width=4),
+        dbc.Col(dbc.Button('Delete', id='compliance-tmpl-delete-btn', color='danger'), width=2),
     ], className='mb-3'),
-    html.Div(id='tmpl-message'),
-    dash_table.DataTable(id='tmpl-table', columns=[
+    html.Div(id='compliance-tmpl-message'),
+    dash_table.DataTable(id='compliance-tmpl-table', columns=[
         {'name': 'Name', 'id': 'name'},
         {'name': 'Description', 'id': 'description'},
         {'name': 'Rule count', 'id': 'rule_count'},
     ]),
-    dbc.Button('Refresh', id='tmpl-refresh-btn', className='mt-3'),
+    dbc.Button('Refresh', id='compliance-tmpl-refresh-btn', className='mt-3'),
 
     html.Hr(),
 
@@ -124,21 +134,10 @@ layout = dbc.Container([
 
 # --- 1. Report runner helpers ----------------------------------------------
 
-def _decode_upload(contents, filename):
-    """Decode a dcc.Upload contents string into a DataFrame. Raises on
-    missing upload or an unparseable/unsupported file -- callers turn this
-    into an inline error message rather than letting the callback crash."""
-    if contents is None:
-        raise ValueError("Upload a file first")
-    _header, b64data = contents.split(',', 1)
-    raw_bytes = base64.b64decode(b64data)
-    return dataframe_from_upload_bytes(filename or '', raw_bytes)
-
-
 def _template_dropdown_options():
     """Built-in template names plus every saved custom template name,
     refreshed on every call (not cached at import time)."""
-    options = [{'label': name, 'value': name} for name in sorted(_BUILTIN_COMPLIANCE_TEMPLATE_NAMES)]
+    options = [{'label': name, 'value': name} for name in sorted(_builtin_compliance_template_names())]
     options.extend({'label': t['name'], 'value': t['name']} for t in _list_custom_templates())
     return options
 
@@ -151,7 +150,7 @@ def _run_compliance_report_from_upload(contents, filename, template, use_plugins
     is documented to raise both, and this must never let either propagate
     raw into the Dash callback."""
     try:
-        df = _decode_upload(contents, filename)
+        df = decode_upload_to_dataframe(contents, filename)
     except Exception as exc:
         return {'error': f"Could not parse {filename}: {exc}"}
 
@@ -159,10 +158,6 @@ def _run_compliance_report_from_upload(contents, filename, template, use_plugins
         return build_v1_2_compliance_report(df, template or None, bool(use_plugins))
     except Exception as exc:
         return {'error': str(exc)}
-
-
-def _is_error(result) -> bool:
-    return isinstance(result, dict) and 'error' in result
 
 
 def _render_compliance_report(report):
@@ -198,9 +193,10 @@ def _list_templates_table_data():
 
 
 def _save_custom_template_from_form(name, description, rules_json):
-    """Parse the Textarea's JSON rule array and upsert the template. Mirrors
-    api_add_custom_template()'s normalization (default severity/description/
-    field_pattern/recommendation) so a rule saved with just name+pattern is
+    """Parse the Textarea's JSON rule array and upsert the template. Uses
+    normalize_custom_template_rules() (shared with api_add_custom_template())
+    for validation and default severity/description/field_pattern/
+    recommendation normalization, so a rule saved with just name+pattern is
     still usable by CustomComplianceRule(**r) later."""
     name = (name or '').strip()
     if not name:
@@ -211,24 +207,9 @@ def _save_custom_template_from_form(name, description, rules_json):
     except (TypeError, ValueError) as exc:
         return False, f"Invalid JSON payload: {exc}"
 
-    if not isinstance(rules, list) or len(rules) == 0:
-        return False, "rules must be a non-empty JSON array"
-
-    for rule in rules:
-        if not isinstance(rule, dict) or 'name' not in rule or 'pattern' not in rule:
-            return False, "Each rule requires at least 'name' and 'pattern'"
-
-    normalized_rules = [
-        {
-            'name': rule['name'],
-            'pattern': rule['pattern'],
-            'severity': rule.get('severity', 'medium'),
-            'field_pattern': rule.get('field_pattern'),
-            'description': rule.get('description', ''),
-            'recommendation': rule.get('recommendation'),
-        }
-        for rule in rules
-    ]
+    ok, error, normalized_rules = normalize_custom_template_rules(rules)
+    if not ok:
+        return False, error
 
     _upsert_custom_template(name, description or '', normalized_rules)
     return True, f"Saved template '{name}'"
@@ -246,19 +227,11 @@ def _delete_custom_template_from_form(name):
 # --- 3. Plugin listing helper -----------------------------------------------
 
 def _list_plugins_table_data():
-    """Mirrors api_compliance_plugins()'s field extraction (name/class_name/
-    module/first-line-of-docstring-as-description), calling discover_plugins()
-    directly rather than the HTTP route (no-HTTP-to-self)."""
-    rows = []
-    for plugin in discover_plugins():
-        doc = (type(plugin).__doc__ or '').strip()
-        rows.append({
-            'name': plugin.name,
-            'class_name': type(plugin).__name__,
-            'module': type(plugin).__module__,
-            'description': doc.split('\n')[0].strip() if doc else None,
-        })
-    return rows
+    """Delegates to routes.plugin_info_rows() -- the same field extraction
+    (name/class_name/module/first-line-of-docstring-as-description) used by
+    api_compliance_plugins(), called directly rather than via the HTTP route
+    (no-HTTP-to-self)."""
+    return plugin_info_rows()
 
 
 # --- Callbacks ---------------------------------------------------------------
@@ -282,19 +255,19 @@ def _handle_compliance_report_actions(n_clicks, contents, filename, template, us
 
 
 @callback(
-    [Output('tmpl-table', 'data'), Output('tmpl-message', 'children'),
+    [Output('compliance-tmpl-table', 'data'), Output('compliance-tmpl-message', 'children'),
      Output('compliance-template-dropdown', 'options', allow_duplicate=True)],
-    [Input('tmpl-save-btn', 'n_clicks'), Input('tmpl-delete-btn', 'n_clicks'), Input('tmpl-refresh-btn', 'n_clicks')],
-    [State('tmpl-name-input', 'value'), State('tmpl-description-input', 'value'),
-     State('tmpl-rules-input', 'value'), State('tmpl-delete-name-input', 'value')],
+    [Input('compliance-tmpl-save-btn', 'n_clicks'), Input('compliance-tmpl-delete-btn', 'n_clicks'), Input('compliance-tmpl-refresh-btn', 'n_clicks')],
+    [State('compliance-tmpl-name-input', 'value'), State('compliance-tmpl-description-input', 'value'),
+     State('compliance-tmpl-rules-input', 'value'), State('compliance-tmpl-delete-name-input', 'value')],
     prevent_initial_call=True,
 )
 def _handle_template_actions(save_clicks, delete_clicks, refresh_clicks, name, description, rules_json, delete_name):
     triggered = dash.ctx.triggered_id
     message = ""
-    if triggered == 'tmpl-save-btn':
+    if triggered == 'compliance-tmpl-save-btn':
         _ok, message = _save_custom_template_from_form(name, description, rules_json)
-    elif triggered == 'tmpl-delete-btn':
+    elif triggered == 'compliance-tmpl-delete-btn':
         _ok, message = _delete_custom_template_from_form(delete_name)
     return _list_templates_table_data(), message, _template_dropdown_options()
 

@@ -1,9 +1,12 @@
 """Session-wide test fixtures shared across the whole suite."""
 
+import base64
 import os
 import tempfile
 
 import pytest
+from dash._callback_context import context_value
+from dash._utils import AttributeDict
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -71,3 +74,41 @@ def _isolated_custom_rules_db():
         os.unlink(tf.name)
     except FileNotFoundError:
         pass
+
+
+def _make_upload_contents(raw_bytes: bytes, mime: str = 'text/csv') -> str:
+    """Build a dcc.Upload-style 'contents' string: 'data:<mime>;base64,<b64>'.
+
+    Shared by the Dash page test files whose pages take a raw-bytes upload
+    (test_dash_security_page.py, test_dash_anonymize_page.py,
+    test_dash_analytics_page.py, test_dash_compliance_page.py), which used
+    to define this identically. test_dash_layout.py's DataFrame-based helper
+    of the same name is a distinct, differently-shaped local helper and is
+    out of scope here.
+    """
+    encoded = base64.b64encode(raw_bytes).decode()
+    return f"data:{mime};base64,{encoded}"
+
+
+def _set_triggered(component_id):
+    """Make dash.ctx.triggered_id resolve to component_id inside a
+    directly-called callback. Shared by every Dash page test file that
+    exercises a multi-button ctx.triggered_id dispatcher, which used to
+    define this identically."""
+    context_value.set(AttributeDict(triggered_inputs=[{'prop_id': f'{component_id}.n_clicks'}]))
+
+
+@pytest.fixture
+def _clean_custom_templates():
+    """Save/restore the custom_templates table so tests don't leak state
+    into each other or into other test files sharing the same session-wide
+    SQLite-backed store (see _isolated_custom_rules_db above). Shared by
+    test_compliance_plugins_templates.py and test_dash_compliance_page.py,
+    which used to define this identically."""
+    from medical_data_validator.dashboard import routes as routes_module
+
+    before_names = {t['name'] for t in routes_module._list_custom_templates()}
+    yield
+    for t in routes_module._list_custom_templates():
+        if t['name'] not in before_names:
+            routes_module._delete_custom_template(t['name'])

@@ -19,7 +19,7 @@ There are three overlapping route mechanisms, and not every endpoint exists on e
 
 - **`/v1.2/*`** — flask-restx Swagger `Namespace` wrapping the v1.2 feature set (health, validate/data, validate/file, compliance/check, profiles, standards). Documented at `/docs`.
 - **`/api/*` (Namespace)** — the same handful of endpoints as above, also exposed under the legacy `/api` path via a second Namespace, for backward compatibility.
-- **`/api/*` (plain Flask Blueprint)** — everything else: `/api/compliance/v1.2`, `/api/compliance/templates`, `/api/compliance/custom-rules`, `/api/anonymize`, `/api/analytics`, `/api/monitoring/*`, plus the Security, Registry, Jobs, Reports, and Auth endpoints documented below. These only exist under `/api`, not `/v1.2`.
+- **`/api/*` (plain Flask Blueprint)** — everything else: `/api/compliance/v1.2`, `/api/compliance/templates`, `/api/compliance/plugins`, `/api/compliance/custom-templates`, `/api/compliance/custom-rules`, `/api/anonymize`, `/api/analytics`, `/api/monitoring/*`, plus the Security, Registry, Jobs, Reports, and Auth endpoints documented below. These only exist under `/api`, not `/v1.2`.
 
 `flask-restx`'s `marshal_with` response schemas drop any field not declared on the schema and null out declared fields the handler didn't populate — so a few "documented" v1.2 response fields (`risk_assessment`, `analytics` on `/validate/data`) are aspirational placeholders in the current implementation rather than populated data. The `compliance_report` returned by `/validate/data` and `/validate/file` is populated and nested under `summary.compliance_report` in the underlying `ValidationResult.to_dict()`.
 
@@ -466,6 +466,77 @@ Strips HTML tags, script injection, and SQL-injection-style characters from text
 ```json
 {"success": true, "sanitized_data": [{"...": "..."}]}
 ```
+
+## Compliance Plugin & Custom Template Endpoints
+
+No authentication required.
+
+### List Compliance Plugins
+
+**GET** `/api/compliance/plugins`
+
+Lists compliance plugins discovered via the `medical_data_validator.compliance_plugins` entry-point group (e.g. the built-in FHIR R4 and SNOMED CT plugins). Pass `use_plugins=true` to `/api/compliance/v1.2` to apply all discovered plugins to that report.
+
+**Response:**
+```json
+{
+  "success": true,
+  "count": 2,
+  "plugins": [
+    {"name": "fhir_r4", "class_name": "FHIRCompliancePlugin", "module": "medical_data_validator.plugins", "description": "FHIR R4 resource compliance checks"},
+    {"name": "snomed_ct", "class_name": "SNOMEDCompliancePlugin", "module": "medical_data_validator.plugins", "description": "SNOMED CT terminology compliance checks"}
+  ]
+}
+```
+
+### Custom Compliance Templates
+
+Named, reusable bundles of custom compliance rules — distinct from the read-only, built-in-only `/api/compliance/templates`. Stored server-side (SQLite) and shared across worker processes.
+
+**GET** `/api/compliance/custom-templates`
+
+List all saved custom templates.
+
+**Response:**
+```json
+[
+  {"name": "my_template", "description": "optional description", "rules": [
+    {"name": "no_fax", "pattern": "\\bfax\\b", "severity": "medium", "field_pattern": null, "description": "", "recommendation": null}
+  ]}
+]
+```
+
+**POST** `/api/compliance/custom-templates`
+
+Create or update (by name) a custom compliance template.
+
+**Request Body:**
+```json
+{
+  "name": "my_template",
+  "description": "optional description",
+  "rules": [
+    {"name": "no_fax", "pattern": "\\bfax\\b", "severity": "medium"}
+  ]
+}
+```
+Each rule requires at least `name` and `pattern`; `severity`, `field_pattern`, `description`, and `recommendation` default to `"medium"`, `null`, `""`, and `null` respectively when omitted.
+
+**Response:**
+```json
+{"success": true, "message": "Custom template 'my_template' saved"}
+```
+
+**DELETE** `/api/compliance/custom-templates/<name>`
+
+Remove a custom compliance template (`404` if the name doesn't exist).
+
+**Response:**
+```json
+{"success": true, "message": "Template \"my_template\" removed successfully"}
+```
+
+A saved custom template is applied to `/api/compliance/v1.2` by passing `template=<name>` in the form body, alongside the 5 built-in templates (`clinical_trials`, `ehr`, `laboratory`, `imaging`, `research`).
 
 ## Registry Endpoints
 

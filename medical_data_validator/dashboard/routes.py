@@ -644,9 +644,21 @@ def api_compliance_check():
         }), 500
 
 
-# Built-in compliance template names (must match compliance_templates.py's
-# ComplianceTemplateManager._create_default_templates() exactly).
-_BUILTIN_COMPLIANCE_TEMPLATE_NAMES = {'clinical_trials', 'ehr', 'laboratory', 'imaging', 'research'}
+def _builtin_compliance_template_names() -> set:
+    """Built-in compliance template names, derived from the same source
+    api_templates() uses (get_available_compliance_templates(), which reads
+    the module-level `template_manager` in core.py) rather than a separate
+    hardcoded literal -- so the two can never silently drift if a template is
+    renamed/added/removed.
+
+    A function computed on demand rather than a module-level constant, so it
+    never needs to construct a MedicalDataValidator (which spawns background
+    monitoring threads by default) at import time.
+    """
+    from ..core import template_manager
+    if template_manager is None:
+        return set()
+    return set(template_manager.list_templates().keys())
 
 
 def build_v1_2_compliance_report(df: pd.DataFrame, template: Optional[str] = None,
@@ -654,9 +666,9 @@ def build_v1_2_compliance_report(df: pd.DataFrame, template: Optional[str] = Non
     """Resolve template (built-in or custom) + optional plugins + the
     always-on custom-rules loop, run validate(), return the flattened
     compliance_report dict (+ 'plugins_applied'). Shared by
-    api_v1_2_compliance() and the future Compliance Dash page.
+    api_v1_2_compliance() and the Compliance Dash page.
     """
-    built_in_names = _BUILTIN_COMPLIANCE_TEMPLATE_NAMES
+    built_in_names = _builtin_compliance_template_names()
 
     # Create validator with v1.2 compliance enabled. compliance_template=
     # (consumed by MedicalDataValidator/ComplianceTemplateManager.apply_template)
@@ -792,7 +804,8 @@ def api_v1_2_compliance():
                     'overall_score': 100,
                     'risk_level': 'low',
                     'all_violations': [],
-                    'template_applied': template
+                    'template_applied': template,
+                    'plugins_applied': []
                 }
             })
 
@@ -830,21 +843,29 @@ def api_templates():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+def plugin_info_rows() -> List[Dict[str, Any]]:
+    """Extract name/class_name/module/first-line-of-docstring-as-description
+    for every discovered compliance plugin. Shared by api_compliance_plugins()
+    and dashboard/pages/compliance.py's read-only plugin listing table (which
+    calls this directly rather than the HTTP route -- no-HTTP-to-self)."""
+    from ..plugins import discover_plugins
+    result = []
+    for p in discover_plugins():
+        doc = (type(p).__doc__ or '').strip()
+        result.append({
+            'name': p.name,
+            'class_name': type(p).__name__,
+            'module': type(p).__module__,
+            'description': doc.split('\n')[0].strip() if doc else None,
+        })
+    return result
+
+
 def api_compliance_plugins():
     """List compliance plugins discovered via the
     'medical_data_validator.compliance_plugins' entry-point group."""
-    from ..plugins import discover_plugins
     try:
-        plugins = discover_plugins()
-        result = []
-        for p in plugins:
-            doc = (type(p).__doc__ or '').strip()
-            result.append({
-                'name': p.name,
-                'class_name': type(p).__name__,
-                'module': type(p).__module__,
-                'description': doc.split('\n')[0].strip() if doc else None,
-            })
+        result = plugin_info_rows()
         return jsonify({'success': True, 'plugins': result, 'count': len(result)})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -1073,6 +1094,38 @@ def api_custom_templates():
     return jsonify(_list_custom_templates())
 
 
+def normalize_custom_template_rules(rules: Optional[list]) -> "tuple[bool, str, list]":
+    """Validate a custom template's `rules` list and return normalized rule
+    dicts with severity/field_pattern/description/recommendation defaults
+    filled in. Returns (ok, error_message, normalized_rules) -- error_message
+    is '' when ok is True and normalized_rules is [] when ok is False.
+
+    Shared by api_add_custom_template() (JSON API) and
+    dashboard/pages/compliance.py's _save_custom_template_from_form() (Dash
+    Textarea JSON payload), which used to reimplement this validation
+    verbatim.
+    """
+    if not isinstance(rules, list) or len(rules) == 0:
+        return False, "rules must be a non-empty list", []
+
+    for rule in rules:
+        if not isinstance(rule, dict) or 'name' not in rule or 'pattern' not in rule:
+            return False, "Each rule requires at least 'name' and 'pattern'", []
+
+    normalized_rules = [
+        {
+            'name': rule['name'],
+            'pattern': rule['pattern'],
+            'severity': rule.get('severity', 'medium'),
+            'field_pattern': rule.get('field_pattern'),
+            'description': rule.get('description', ''),
+            'recommendation': rule.get('recommendation'),
+        }
+        for rule in rules
+    ]
+    return True, '', normalized_rules
+
+
 def api_add_custom_template():
     """Add (or update, by name) a custom compliance template."""
     try:
@@ -1083,28 +1136,9 @@ def api_add_custom_template():
         if not data.get('name'):
             return jsonify({"success": False, "error": "Missing required field: name"}), 400
 
-        rules = data.get('rules')
-        if not isinstance(rules, list) or len(rules) == 0:
-            return jsonify({"success": False, "error": "Missing required field: rules"}), 400
-
-        for rule in rules:
-            if not isinstance(rule, dict) or 'name' not in rule or 'pattern' not in rule:
-                return jsonify({
-                    "success": False,
-                    "error": "Each rule requires at least 'name' and 'pattern'",
-                }), 400
-
-        normalized_rules = [
-            {
-                'name': rule['name'],
-                'pattern': rule['pattern'],
-                'severity': rule.get('severity', 'medium'),
-                'field_pattern': rule.get('field_pattern'),
-                'description': rule.get('description', ''),
-                'recommendation': rule.get('recommendation'),
-            }
-            for rule in rules
-        ]
+        ok, error, normalized_rules = normalize_custom_template_rules(data.get('rules'))
+        if not ok:
+            return jsonify({"success": False, "error": error}), 400
 
         _upsert_custom_template(data['name'], data.get('description', ''), normalized_rules)
 

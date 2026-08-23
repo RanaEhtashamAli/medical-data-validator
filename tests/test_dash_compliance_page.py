@@ -6,12 +6,9 @@ report runner (build_v1_2_compliance_report wiring), custom template CRUD
 wiring), and read-only plugin listing (discover_plugins wiring).
 """
 
-import base64
 import json
 
 import pytest
-from dash._callback_context import context_value
-from dash._utils import AttributeDict
 
 # dashboard.pages.compliance calls dash.register_page() at import time, which
 # requires dash.Dash(use_pages=True) to have already run at least once in
@@ -23,32 +20,17 @@ from dash._utils import AttributeDict
 from medical_data_validator.dashboard.app import create_dashboard_app
 create_dashboard_app()
 
-from medical_data_validator.dashboard import routes as routes_module
+from tests.conftest import _make_upload_contents, _set_triggered
 
 
 @pytest.fixture(autouse=True)
-def _clean_custom_templates():
-    """Save/restore the custom_templates table so tests in this file don't
-    leak state into each other or into other test files sharing the same
-    session-wide SQLite-backed store (see conftest.py's
-    _isolated_custom_rules_db and test_compliance_plugins_templates.py's
-    identically-shaped fixture)."""
-    before_names = {t['name'] for t in routes_module._list_custom_templates()}
+def _use_clean_custom_templates(_clean_custom_templates):
+    """Activates conftest.py's shared (non-autouse) `_clean_custom_templates`
+    fixture as autouse for every test in this file, so tests here don't leak
+    state into each other or into test_compliance_plugins_templates.py, which
+    shares the same session-wide SQLite-backed store (see conftest.py's
+    _isolated_custom_rules_db)."""
     yield
-    for t in routes_module._list_custom_templates():
-        if t['name'] not in before_names:
-            routes_module._delete_custom_template(t['name'])
-
-
-def _make_upload_contents(raw_bytes: bytes, mime: str = 'text/csv') -> str:
-    """Build a dcc.Upload-style 'contents' string: 'data:<mime>;base64,<b64>'."""
-    encoded = base64.b64encode(raw_bytes).decode()
-    return f"data:{mime};base64,{encoded}"
-
-
-def _set_triggered(component_id):
-    """Make dash.ctx.triggered_id resolve to component_id inside a directly-called callback."""
-    context_value.set(AttributeDict(triggered_inputs=[{'prop_id': f'{component_id}.n_clicks'}]))
 
 
 def _flatten_text(component):
@@ -231,7 +213,7 @@ def test_handle_template_actions_save_routes_correctly_and_does_not_delete():
     )
     _save_custom_template_from_form('pre_existing_dash_template', 'desc', '[{"name":"a","pattern":"b"}]')
 
-    _set_triggered('tmpl-save-btn')
+    _set_triggered('compliance-tmpl-save-btn')
     rows, message, options = _handle_template_actions(
         1, None, None, 'dispatch_save_template', 'desc', '[{"name":"x","pattern":"y"}]', None)
 
@@ -248,7 +230,7 @@ def test_handle_template_actions_delete_routes_correctly_and_does_not_save():
     )
     _save_custom_template_from_form('dispatch_delete_template', 'desc', '[{"name":"a","pattern":"b"}]')
 
-    _set_triggered('tmpl-delete-btn')
+    _set_triggered('compliance-tmpl-delete-btn')
     rows, message, options = _handle_template_actions(
         None, 1, None, 'should-not-be-saved', 'desc', '[{"name":"z","pattern":"q"}]', 'dispatch_delete_template')
 
@@ -265,7 +247,7 @@ def test_handle_template_actions_refresh_neither_saves_nor_deletes():
     )
     _save_custom_template_from_form('refresh_visible_template', 'desc', '[{"name":"a","pattern":"b"}]')
 
-    _set_triggered('tmpl-refresh-btn')
+    _set_triggered('compliance-tmpl-refresh-btn')
     rows, message, options = _handle_template_actions(
         None, None, 1, 'should-not-be-saved-either', 'desc', '[{"name":"z","pattern":"q"}]',
         'refresh_visible_template')

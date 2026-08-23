@@ -121,6 +121,9 @@ medical-validator validate data.csv \
 | POST | `/api/security/sanitize` | Strip HTML/script injection from text columns | none |
 | POST | `/api/compliance/v1.2` | Full HIPAA/GDPR/FDA/medical-coding compliance report | none |
 | GET | `/api/compliance/templates` | List built-in compliance templates | none |
+| GET | `/api/compliance/plugins` | List discovered compliance plugins (e.g. FHIR R4, SNOMED CT) | none |
+| GET/POST | `/api/compliance/custom-templates` | List / add a custom compliance template (named bundle of rules) | none |
+| DELETE | `/api/compliance/custom-templates/<name>` | Remove a custom compliance template | none |
 | GET/POST | `/api/compliance/custom-rules` | List / add a custom compliance rule (regex pattern) | none |
 | DELETE | `/api/compliance/custom-rules/<name>` | Remove a custom compliance rule | none |
 | POST | `/api/analytics` | Data quality analytics (completeness, trends, anomalies) | none |
@@ -156,6 +159,11 @@ JWT-protected endpoints use three roles (`admin` > `data-steward` > `read-only`)
 | Custom Rules | `/dash/custom-rules` | List, add, remove custom compliance rules |
 | Audit Log | `/dash/audit` | Browse the audit trail |
 | Users & Tenants | `/dash/auth` | Manage users and tenants |
+| Security | `/dash/security` | Run a HIPAA check or security audit, sanitize a dataset |
+| Anonymize | `/dash/anonymize` | Anonymize PHI/PII columns (HIPAA Safe Harbor, hash, or mask) |
+| Analytics | `/dash/analytics` | Data quality metrics, anomaly detection, and trend analysis |
+| Monitoring | `/dash/monitoring` | Real-time validation stats, alert management, quality trends |
+| Compliance | `/dash/compliance` | Run v1.2 compliance reports, manage custom templates, view plugins |
 
 > **Note:** the dashboard calls the underlying business logic directly, in-process, as a fixed `default`-tenant identity — it does **not** go through the REST API's JWT/role checks. Treat `/dash/` as an internal admin tool (e.g. behind a reverse-proxy auth layer or restricted network access), not as a role-scoped, multi-tenant-safe UI on its own.
 

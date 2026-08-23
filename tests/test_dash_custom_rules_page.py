@@ -1,8 +1,6 @@
 """Tests for the Dash Custom Rules page's extracted callback logic."""
 
 import pytest
-from dash._callback_context import context_value
-from dash._utils import AttributeDict
 from medical_data_validator.dashboard import routes as routes_module
 
 # dashboard.pages.custom_rules calls dash.register_page() at import time,
@@ -14,6 +12,8 @@ from medical_data_validator.dashboard import routes as routes_module
 # tests/test_dash_registry_page.py.)
 from medical_data_validator.dashboard.app import create_dashboard_app
 create_dashboard_app()
+
+from tests.conftest import _set_triggered
 
 
 @pytest.fixture(autouse=True)
@@ -63,11 +63,6 @@ def test_remove_custom_rule_from_form_requires_name():
     from medical_data_validator.dashboard.pages.custom_rules import _remove_custom_rule_from_form
     ok, message = _remove_custom_rule_from_form('')
     assert ok is False
-
-
-def _set_triggered(component_id):
-    """Make dash.ctx.triggered_id resolve to component_id inside a directly-called callback."""
-    context_value.set(AttributeDict(triggered_inputs=[{'prop_id': f'{component_id}.n_clicks'}]))
 
 
 # --- Fix 2: directly test the `_handle_rules_actions` dispatcher -----------

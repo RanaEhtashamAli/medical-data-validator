@@ -28,7 +28,6 @@ import io
 import pytest
 
 from medical_data_validator.dashboard.app import create_dashboard_app
-from medical_data_validator.dashboard import routes as routes_module
 
 
 @pytest.fixture(scope="module")
@@ -40,15 +39,12 @@ def client():
 
 
 @pytest.fixture(autouse=True)
-def _clean_custom_templates():
-    """Save/restore the custom_templates table so tests in this file don't
-    leak state into each other or into other test files sharing the same
-    session-wide SQLite-backed store (see _isolated_custom_rules_db)."""
-    before_names = {t['name'] for t in routes_module._list_custom_templates()}
+def _use_clean_custom_templates(_clean_custom_templates):
+    """Activates conftest.py's shared (non-autouse) `_clean_custom_templates`
+    fixture as autouse for every test in this file, so tests here don't leak
+    state into each other or into test_dash_compliance_page.py, which shares
+    the same session-wide SQLite-backed store (see _isolated_custom_rules_db)."""
     yield
-    for t in routes_module._list_custom_templates():
-        if t['name'] not in before_names:
-            routes_module._delete_custom_template(t['name'])
 
 
 # ---------------------------------------------------------------------------

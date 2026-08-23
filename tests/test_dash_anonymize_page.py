@@ -1,7 +1,5 @@
 """Tests for the Dash Anonymize page's extracted callback logic."""
 
-import base64
-
 import pytest
 
 # dashboard.pages.anonymize calls dash.register_page() at import time, which
@@ -14,12 +12,7 @@ import pytest
 from medical_data_validator.dashboard.app import create_dashboard_app
 create_dashboard_app()
 
-
-def _make_upload_contents(raw_bytes: bytes, mime: str = 'text/csv') -> str:
-    """Build a dcc.Upload-style 'contents' string: 'data:<mime>;base64,<b64>'."""
-    encoded = base64.b64encode(raw_bytes).decode()
-    return f"data:{mime};base64,{encoded}"
-
+from tests.conftest import _make_upload_contents
 
 NAME_CSV = b"patient_id,name,notes\n1,John Smith,fine\n2,Jane Doe,ok\n"
 
@@ -95,3 +88,33 @@ def test_run_anonymize_from_upload_whitespace_only_columns_auto_detects(columns_
     # Explicitly confirm PHI actually got anonymized, not silently skipped.
     assert whitespace_records[0]['name'] != 'John Smith'
     assert whitespace_records[1]['name'] != 'Jane Doe'
+
+
+def test_handle_anonymize_failed_run_clears_the_download_store():
+    """I4 regression: a failed anonymize run must clear anon-last-result-store
+    to None rather than leaving it as dash.no_update, so the download button
+    can't hand out a prior successful run's data when the results on screen
+    reflect a failure."""
+    from medical_data_validator.dashboard.pages.anonymize import _handle_anonymize
+    contents = _make_upload_contents(NAME_CSV)
+
+    children, preview_data, preview_columns, store_data = _handle_anonymize(
+        1, contents, 'patients.csv', 'not-a-method', ''
+    )
+
+    assert preview_data == []
+    assert preview_columns == []
+    assert store_data is None
+
+
+def test_handle_anonymize_success_then_failure_clears_stale_store_data():
+    """A successful run followed by a failing one must not leave the earlier
+    successful run's records downloadable."""
+    from medical_data_validator.dashboard.pages.anonymize import _handle_anonymize
+    contents = _make_upload_contents(NAME_CSV)
+
+    _children, _data, _cols, store_data = _handle_anonymize(1, contents, 'patients.csv', 'mask', '')
+    assert store_data is not None
+
+    _children, _data, _cols, store_data = _handle_anonymize(2, contents, 'patients.csv', 'not-a-method', '')
+    assert store_data is None

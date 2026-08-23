@@ -6,8 +6,6 @@ and a separate download callback reading from that store — since anonymize
 is the same "upload, act, preview, download" flow with a single action.
 """
 
-import base64
-
 import dash
 import dash_bootstrap_components as dbc
 import pandas as pd
@@ -15,7 +13,7 @@ from dash import dcc, html, dash_table, Input, Output, State, callback
 
 from medical_data_validator.dashboard.routes import anonymize_dataframe
 from medical_data_validator.dashboard.utils import (
-    dataframe_from_upload_bytes,
+    decode_upload_to_dataframe,
     register_page_once,
 )
 
@@ -95,21 +93,10 @@ layout = dbc.Container([
         dbc.Col([
             dbc.Button('Download CSV', id='anon-download-btn', className='mt-3'),
             dcc.Download(id='anon-download'),
-            dcc.Store(id='anon-last-result'),
+            dcc.Store(id='anon-last-result-store'),
         ])
     ]),
 ], fluid=True)
-
-
-def _decode_upload(contents, filename):
-    """Decode a dcc.Upload contents string into a DataFrame. Raises on
-    missing upload or an unparseable/unsupported file — callers turn this
-    into an inline error message rather than letting the callback crash."""
-    if contents is None:
-        raise ValueError("Upload a file first")
-    _header, b64data = contents.split(',', 1)
-    raw_bytes = base64.b64decode(b64data)
-    return dataframe_from_upload_bytes(filename or '', raw_bytes)
 
 
 def _run_anonymize_from_upload(contents, filename, method, columns_csv):
@@ -128,7 +115,7 @@ def _run_anonymize_from_upload(contents, filename, method, columns_csv):
         return False, f"Unknown method '{method}'. Use hipaa_safe_harbor, hash, or mask.", None
 
     try:
-        df = _decode_upload(contents, filename)
+        df = decode_upload_to_dataframe(contents, filename)
     except Exception as exc:
         return False, f"Could not parse {filename}: {exc}", None
 
@@ -152,7 +139,7 @@ def _render_results(success, message):
     [Output('anon-results', 'children'),
      Output('anon-preview-table', 'data'),
      Output('anon-preview-table', 'columns'),
-     Output('anon-last-result', 'data')],
+     Output('anon-last-result-store', 'data')],
     Input('anon-run-btn', 'n_clicks'),
     [State('anon-upload', 'contents'),
      State('anon-upload', 'filename'),
@@ -164,7 +151,10 @@ def _handle_anonymize(n_clicks, contents, filename, method, columns_csv):
     success, message, records = _run_anonymize_from_upload(contents, filename, method, columns_csv)
 
     if not success:
-        return _render_results(False, message), [], [], dash.no_update
+        # Clear the store on failure: the results shown on screen reflect a
+        # failure, so any prior successful run's data must not remain
+        # downloadable via a stale store value.
+        return _render_results(False, message), [], [], None
 
     preview = records[:20]
     columns = [{'name': c, 'id': c} for c in (preview[0].keys() if preview else [])]
@@ -174,7 +164,7 @@ def _handle_anonymize(n_clicks, contents, filename, method, columns_csv):
 @callback(
     Output('anon-download', 'data'),
     Input('anon-download-btn', 'n_clicks'),
-    State('anon-last-result', 'data'),
+    State('anon-last-result-store', 'data'),
     prevent_initial_call=True,
 )
 def _download_anonymized_csv(n_clicks, records):

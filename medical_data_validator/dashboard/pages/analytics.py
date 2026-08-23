@@ -6,14 +6,14 @@ Follows dashboard/pages/validate.py's single-trigger upload-decode pattern
 Analysis"), unlike registry.py/security.py's multi-button dispatcher pages.
 """
 
-import base64
 import json
 
 import dash_bootstrap_components as dbc
 from dash import dcc, html, dash_table, Input, Output, State, callback
 
 from medical_data_validator.dashboard.utils import (
-    dataframe_from_upload_bytes,
+    _is_error,
+    decode_upload_to_dataframe,
     register_page_once,
 )
 
@@ -86,6 +86,7 @@ layout = dbc.Container([
     ], className='mb-3'),
     dbc.Row([
         dbc.Col([
+            html.Div(id='analytics-message'),
             html.H4(id='analytics-quality-score'),
         ])
     ]),
@@ -116,10 +117,6 @@ layout = dbc.Container([
 ], fluid=True)
 
 
-def _is_error(result) -> bool:
-    return isinstance(result, dict) and 'error' in result
-
-
 def _run_analytics_from_upload(contents, filename, time_column):
     """Decode the upload and run AdvancedAnalytics().comprehensive_analysis().
 
@@ -133,11 +130,8 @@ def _run_analytics_from_upload(contents, filename, time_column):
     from medical_data_validator.analytics import AdvancedAnalytics
     from medical_data_validator.dashboard.routes import convert_numpy_types
 
-    _header, b64data = contents.split(',', 1)
-    raw_bytes = base64.b64decode(b64data)
-
     try:
-        df = dataframe_from_upload_bytes(filename or '', raw_bytes)
+        df = decode_upload_to_dataframe(contents, filename)
     except Exception as exc:
         return {'error': f"Could not parse {filename}: {exc}"}
 
@@ -173,7 +167,8 @@ def _render_trends(trends):
 
 
 @callback(
-    [Output('analytics-quality-score', 'children'),
+    [Output('analytics-message', 'children'),
+     Output('analytics-quality-score', 'children'),
      Output('analytics-metrics-table', 'data'),
      Output('analytics-anomalies-table', 'data'),
      Output('analytics-trends', 'children'),
@@ -188,7 +183,10 @@ def _update_analytics(n_clicks, contents, filename, time_column):
     result = _run_analytics_from_upload(contents, filename, time_column)
 
     if _is_error(result):
-        return result['error'], [], [], "", ""
+        # Errors render as a dedicated dbc.Alert instead of overloading the
+        # quality-score H4 (which used to render a raw error string as an
+        # oversized, unstyled heading).
+        return dbc.Alert(result['error'], color='danger'), "", [], [], "", ""
 
     quality_score = f"Overall quality score: {result.get('overall_quality_score')}"
     metrics_data = _metrics_table_data(result.get('quality_metrics', {}))
@@ -196,4 +194,4 @@ def _update_analytics(n_clicks, contents, filename, time_column):
     trends_children = _render_trends(result.get('trends', []))
     summary_text = json.dumps(result.get('statistical_summary', {}), indent=2, default=str)
 
-    return quality_score, metrics_data, anomalies_data, trends_children, summary_text
+    return "", quality_score, metrics_data, anomalies_data, trends_children, summary_text

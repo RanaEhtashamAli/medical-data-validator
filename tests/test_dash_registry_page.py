@@ -3,8 +3,6 @@
 import tempfile
 import pytest
 import dash
-from dash._callback_context import context_value
-from dash._utils import AttributeDict
 import medical_data_validator.registry as registry
 
 # dashboard.pages.registry calls dash.register_page() at import time, which
@@ -15,6 +13,8 @@ import medical_data_validator.registry as registry
 # (Same pattern as tests/test_dash_layout.py for the Validate page.)
 from medical_data_validator.dashboard.app import create_dashboard_app
 create_dashboard_app()
+
+from tests.conftest import _set_triggered
 
 
 @pytest.fixture(autouse=True)
@@ -147,11 +147,6 @@ def test_delete_dataset_by_id_rejects_other_tenant():
     ok, message = _delete_dataset_by_id(other['id'])
     assert ok is False
     assert registry.get_dataset(other['id']) is not None
-
-
-def _set_triggered(component_id):
-    """Make dash.ctx.triggered_id resolve to component_id inside a directly-called callback."""
-    context_value.set(AttributeDict(triggered_inputs=[{'prop_id': f'{component_id}.n_clicks'}]))
 
 
 # --- Fix 1 Part B: Update must not report success on a no-op ---------------

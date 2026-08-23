@@ -1,13 +1,11 @@
 """Dash page: upload a file and run validation against the real validator."""
 
-import base64
-
 import dash
 import dash_bootstrap_components as dbc
 from dash import dcc, html, Input, Output, State, callback
 
 from medical_data_validator.dashboard.utils import (
-    dataframe_from_upload_bytes,
+    decode_upload_to_dataframe,
     generate_charts,
     register_page_once,
 )
@@ -112,11 +110,8 @@ def _run_validation_for_upload(contents, filename, options, profile):
 
     from medical_data_validator.dashboard.routes import create_validator
 
-    _header, b64data = contents.split(',', 1)
-    raw_bytes = base64.b64decode(b64data)
-
     try:
-        df = dataframe_from_upload_bytes(filename or '', raw_bytes)
+        df = decode_upload_to_dataframe(contents, filename)
     except Exception as exc:
         return f"Could not parse {filename}: {exc}", {}, {}, {}, {}, None
 

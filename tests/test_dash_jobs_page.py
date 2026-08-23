@@ -4,8 +4,6 @@ import tempfile
 import time
 import pytest
 import dash
-from dash._callback_context import context_value
-from dash._utils import AttributeDict
 import medical_data_validator.jobs as jobs
 
 # dashboard.pages.jobs calls dash.register_page() at import time, which
@@ -16,6 +14,8 @@ import medical_data_validator.jobs as jobs
 # (Same pattern as tests/test_dash_layout.py and test_dash_registry_page.py.)
 from medical_data_validator.dashboard.app import create_dashboard_app
 create_dashboard_app()
+
+from tests.conftest import _set_triggered
 
 
 @pytest.fixture(autouse=True)
@@ -109,11 +109,6 @@ def test_get_job_detail_rejects_other_tenant_job():
     assert ok is False
     assert job is None
     assert 'not found' in message.lower()
-
-
-def _set_triggered(component_id):
-    """Make dash.ctx.triggered_id resolve to component_id inside a directly-called callback."""
-    context_value.set(AttributeDict(triggered_inputs=[{'prop_id': f'{component_id}.n_clicks'}]))
 
 
 # --- Fix 2: directly test the `_handle_jobs_actions` dispatcher ------------

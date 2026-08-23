@@ -1,6 +1,5 @@
 """Tests for the Dash Analytics page's extracted callback logic."""
 
-import base64
 import json
 
 # dashboard.pages.analytics calls dash.register_page() at import time, which
@@ -13,12 +12,7 @@ import json
 from medical_data_validator.dashboard.app import create_dashboard_app
 create_dashboard_app()
 
-
-def _make_upload_contents(raw_bytes: bytes, mime: str = 'text/csv') -> str:
-    """Build a dcc.Upload-style 'contents' string: 'data:<mime>;base64,<b64>'."""
-    encoded = base64.b64encode(raw_bytes).decode()
-    return f"data:{mime};base64,{encoded}"
-
+from tests.conftest import _make_upload_contents
 
 NUMERIC_CSV = b"""patient_id,age,weight,visit_date
 1,45,70.5,2023-01-01
@@ -113,10 +107,12 @@ def test_update_analytics_callback_end_to_end():
     from medical_data_validator.dashboard.pages.analytics import _update_analytics
     contents = _make_upload_contents(NUMERIC_CSV)
 
-    quality_score, metrics_data, anomalies_data, trends_children, summary_text = _update_analytics(
+    message, quality_score, metrics_data, anomalies_data, trends_children, summary_text = _update_analytics(
         1, contents, 'patients.csv', ''
     )
 
+    # I3: the message area must be empty on success, not carrying an error.
+    assert message == ""
     assert 'Overall quality score' in quality_score
     assert isinstance(metrics_data, list) and len(metrics_data) > 0
     assert isinstance(anomalies_data, list)
@@ -125,12 +121,17 @@ def test_update_analytics_callback_end_to_end():
 
 
 def test_update_analytics_callback_no_upload_shows_error_message():
+    import dash_bootstrap_components as dbc
     from medical_data_validator.dashboard.pages.analytics import _update_analytics
 
-    quality_score, metrics_data, anomalies_data, trends_children, summary_text = _update_analytics(
+    message, quality_score, metrics_data, anomalies_data, trends_children, summary_text = _update_analytics(
         1, None, None, ''
     )
 
+    # I3: errors render as a dedicated dbc.Alert, not the quality-score H4.
+    assert isinstance(message, dbc.Alert)
+    assert 'Upload a file first' in message.children
+    assert quality_score == ""
     assert metrics_data == []
     assert anomalies_data == []
     assert trends_children == ""

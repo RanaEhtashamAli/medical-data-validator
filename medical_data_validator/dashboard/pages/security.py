@@ -6,15 +6,14 @@ dashboard/pages/registry.py's multi-button dash.ctx.triggered_id dispatcher,
 since this page has three actions sharing a single upload.
 """
 
-import base64
-
 import dash
 import dash_bootstrap_components as dbc
 import pandas as pd
 from dash import dcc, html, dash_table, Input, Output, State, callback
 
 from medical_data_validator.dashboard.utils import (
-    dataframe_from_upload_bytes,
+    _is_error,
+    decode_upload_to_dataframe,
     register_page_once,
 )
 from medical_data_validator.security import (
@@ -91,24 +90,13 @@ layout = dbc.Container([
 ], fluid=True)
 
 
-def _decode_upload(contents, filename):
-    """Decode a dcc.Upload contents string into a DataFrame. Raises on
-    missing upload or an unparseable/unsupported file — callers turn this
-    into an inline error message rather than letting the callback crash."""
-    if contents is None:
-        raise ValueError("Upload a file first")
-    _header, b64data = contents.split(',', 1)
-    raw_bytes = base64.b64decode(b64data)
-    return dataframe_from_upload_bytes(filename or '', raw_bytes)
-
-
 def _run_hipaa_check_from_upload(contents, filename, include_samples):
     """Decode the upload and run HIPAAComplianceChecker.check_hipaa_compliance.
     Returns the report dict, or {'error': message} if the upload couldn't be
     parsed. When include_samples is False, sample_values are stripped down
     to a sample_count via _strip_phi_samples."""
     try:
-        df = _decode_upload(contents, filename)
+        df = decode_upload_to_dataframe(contents, filename)
     except Exception as exc:
         return {'error': f"Could not parse {filename}: {exc}"}
 
@@ -123,7 +111,7 @@ def _run_security_audit_from_upload(contents, filename):
     audit result dict, or {'error': message} if the upload couldn't be
     parsed."""
     try:
-        df = _decode_upload(contents, filename)
+        df = decode_upload_to_dataframe(contents, filename)
     except Exception as exc:
         return {'error': f"Could not parse {filename}: {exc}"}
 
@@ -136,16 +124,12 @@ def _run_sanitize_from_upload(contents, filename):
     /api/security/sanitize endpoint's 'sanitized_data'), or
     {'error': message} if the upload couldn't be parsed."""
     try:
-        df = _decode_upload(contents, filename)
+        df = decode_upload_to_dataframe(contents, filename)
     except Exception as exc:
         return {'error': f"Could not parse {filename}: {exc}"}
 
     sanitized = DataSanitizer().sanitize_data(df)
     return sanitized.to_dict(orient='records')
-
-
-def _is_error(result) -> bool:
-    return isinstance(result, dict) and 'error' in result
 
 
 def _phi_detected_table_data(phi_detected):
@@ -245,15 +229,21 @@ def _handle_security_actions(hipaa_clicks, audit_clicks, sanitize_clicks, conten
 
     if triggered == 'security-hipaa-btn':
         report = _run_hipaa_check_from_upload(contents, filename, bool(include_samples))
-        return _render_hipaa_results(report), dash.no_update
+        # Clear any previously-sanitized data: a stale sanitize result must
+        # never remain downloadable once the user has moved on to a HIPAA
+        # check on a (possibly different) file.
+        return _render_hipaa_results(report), None
 
     if triggered == 'security-audit-btn':
         result = _run_security_audit_from_upload(contents, filename)
-        return _render_audit_results(result), dash.no_update
+        # Same rationale as the HIPAA branch above -- clear the stale store.
+        return _render_audit_results(result), None
 
     if triggered == 'security-sanitize-btn':
         sanitized = _run_sanitize_from_upload(contents, filename)
-        store_data = sanitized if not _is_error(sanitized) else dash.no_update
+        # A failed sanitize run must not leave a prior successful run's data
+        # downloadable (same rationale as anonymize.py's equivalent fix).
+        store_data = sanitized if not _is_error(sanitized) else None
         return _render_sanitize_results(sanitized), store_data
 
     return dash.no_update, dash.no_update

@@ -3,8 +3,6 @@
 import base64
 import pandas as pd
 import dash
-from dash._callback_context import context_value
-from dash._utils import AttributeDict
 
 # dashboard.pages.validate calls dash.register_page() at import time, which
 # requires dash.Dash(use_pages=True) to have already run at least once in
@@ -14,10 +12,7 @@ from dash._utils import AttributeDict
 from medical_data_validator.dashboard.app import create_dashboard_app
 create_dashboard_app()
 
-
-def _set_triggered(component_id):
-    """Make dash.ctx.triggered_id resolve to component_id inside a directly-called callback."""
-    context_value.set(AttributeDict(triggered_inputs=[{'prop_id': f'{component_id}.n_clicks'}]))
+from tests.conftest import _set_triggered
 
 
 def _make_upload_contents(df: pd.DataFrame) -> tuple[str, str]:

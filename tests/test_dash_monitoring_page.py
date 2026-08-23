@@ -1,9 +1,6 @@
 """Tests for the Dash Monitoring page's extracted callback logic."""
 
 import pytest
-import dash
-from dash._callback_context import context_value
-from dash._utils import AttributeDict
 from medical_data_validator.monitoring import RealTimeMonitor
 
 # dashboard.pages.monitoring calls dash.register_page() at import time, which
@@ -16,6 +13,7 @@ from medical_data_validator.dashboard.app import create_dashboard_app
 create_dashboard_app()
 
 import medical_data_validator.dashboard.pages.monitoring as monitoring_page
+from tests.conftest import _set_triggered
 
 
 @pytest.fixture(autouse=True)
@@ -30,11 +28,6 @@ def _isolated_monitor(monkeypatch):
     fresh_monitor = RealTimeMonitor()
     monkeypatch.setattr(monitoring_page, 'monitor', fresh_monitor)
     yield fresh_monitor
-
-
-def _set_triggered(component_id):
-    """Make dash.ctx.triggered_id resolve to component_id inside a directly-called callback."""
-    context_value.set(AttributeDict(triggered_inputs=[{'prop_id': f'{component_id}.n_clicks'}]))
 
 
 # --- Stats -------------------------------------------------------------
@@ -76,6 +69,7 @@ def test_resolve_alert_by_id_not_found():
 
 
 def test_handle_alert_actions_ack_does_not_also_resolve_a_different_alert(_isolated_monitor):
+    import dash_bootstrap_components as dbc
     monitor = _isolated_monitor
     monitor._create_alert('anomaly_detected', 'high', 'first alert', {})
     monitor._create_alert('anomaly_detected', 'high', 'second alert', {})
@@ -84,8 +78,11 @@ def test_handle_alert_actions_ack_does_not_also_resolve_a_different_alert(_isola
     _set_triggered('monitoring-ack-btn')
     rows, message = monitoring_page._handle_alert_actions(1, None, None, first_id)
 
-    assert 'acknowledged' in message.lower()
-    assert first_id in message
+    # I3: the message is now a dbc.Alert (color-coded), not a bare string.
+    assert isinstance(message, dbc.Alert)
+    assert message.color == 'success'
+    assert 'acknowledged' in message.children.lower()
+    assert first_id in message.children
     # Both alerts remain active (unresolved) since ack never resolves.
     assert {r['id'] for r in rows} == {first_id, second_id}
     row_by_id = {r['id']: r for r in rows}
@@ -97,6 +94,7 @@ def test_handle_alert_actions_ack_does_not_also_resolve_a_different_alert(_isola
 
 
 def test_handle_alert_actions_resolve_does_not_also_resolve_a_different_alert(_isolated_monitor):
+    import dash_bootstrap_components as dbc
     monitor = _isolated_monitor
     monitor._create_alert('anomaly_detected', 'high', 'first alert', {})
     monitor._create_alert('anomaly_detected', 'high', 'second alert', {})
@@ -105,13 +103,28 @@ def test_handle_alert_actions_resolve_does_not_also_resolve_a_different_alert(_i
     _set_triggered('monitoring-resolve-btn')
     rows, message = monitoring_page._handle_alert_actions(None, 1, None, first_id)
 
-    assert 'resolved' in message.lower()
-    assert first_id in message
+    assert isinstance(message, dbc.Alert)
+    assert message.color == 'success'
+    assert 'resolved' in message.children.lower()
+    assert first_id in message.children
     # Resolved alerts drop out of get_active_alerts(); only the targeted one is gone.
     remaining_ids = {r['id'] for r in rows}
     assert remaining_ids == {second_id}
     assert next(a for a in monitor.alerts if a.id == first_id).resolved is True
     assert next(a for a in monitor.alerts if a.id == second_id).resolved is False
+
+
+def test_handle_alert_actions_ack_not_found_renders_danger_alert(_isolated_monitor):
+    """I3: an actual error (alert not found) must be visually distinct from
+    a success message."""
+    import dash_bootstrap_components as dbc
+
+    _set_triggered('monitoring-ack-btn')
+    rows, message = monitoring_page._handle_alert_actions(1, None, None, 'nonexistent-id')
+
+    assert isinstance(message, dbc.Alert)
+    assert message.color == 'danger'
+    assert 'not found' in message.children.lower()
 
 
 def test_handle_alert_actions_refresh_does_not_change_any_alert(_isolated_monitor):
@@ -152,9 +165,23 @@ def test_quality_trends_rows_handles_invalid_hours_gracefully():
 
 
 def test_handle_trends_query_no_data_returns_message_not_exception():
+    import dash_bootstrap_components as dbc
     result = monitoring_page._handle_trends_query(1, 'completeness', 24)
-    assert isinstance(result, str)
-    assert 'no trend data' in result.lower()
+    # I3: a neutral "no data" status renders as an info-colored Alert, not a
+    # bare string and not danger (it isn't an error).
+    assert isinstance(result, dbc.Alert)
+    assert result.color == 'info'
+    assert 'no trend data' in result.children.lower()
+
+
+def test_handle_trends_query_validation_error_renders_danger_alert():
+    """I3: an actual validation error (missing metric name) must render as
+    a danger-colored Alert, distinct from the neutral 'no data' status."""
+    import dash_bootstrap_components as dbc
+    result = monitoring_page._handle_trends_query(1, '', 24)
+    assert isinstance(result, dbc.Alert)
+    assert result.color == 'danger'
+    assert 'required' in result.children.lower()
 
 
 def test_handle_trends_query_with_data_returns_table(_isolated_monitor):

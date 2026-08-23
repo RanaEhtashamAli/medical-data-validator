@@ -2,8 +2,6 @@
 
 import pytest
 import dash
-from dash._callback_context import context_value
-from dash._utils import AttributeDict
 import medical_data_validator.auth as auth
 
 # dashboard.pages.auth calls dash.register_page() at import time, which
@@ -15,6 +13,8 @@ import medical_data_validator.auth as auth
 # and test_dash_audit_page.py.)
 from medical_data_validator.dashboard.app import create_dashboard_app
 create_dashboard_app()
+
+from tests.conftest import _set_triggered
 
 
 @pytest.fixture(autouse=True)
@@ -56,11 +56,6 @@ def test_create_tenant_from_form():
     from medical_data_validator.dashboard.pages.auth import _create_tenant_from_form
     ok, message = _create_tenant_from_form('new-tenant')
     assert ok is True
-
-
-def _set_triggered(component_id):
-    """Make dash.ctx.triggered_id resolve to component_id inside a directly-called callback."""
-    context_value.set(AttributeDict(triggered_inputs=[{'prop_id': f'{component_id}.n_clicks'}]))
 
 
 # --- Direct dispatcher tests: _handle_user_actions --------------------------

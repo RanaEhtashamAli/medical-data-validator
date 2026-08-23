@@ -15,7 +15,15 @@ from medical_data_validator.monitoring import monitor
 register_page_once(__name__, path='/monitoring', name='Monitoring')
 
 layout = dbc.Container([
-    html.H2("Monitoring"),
+    dbc.Row([
+        dbc.Col([
+            html.H1("Monitoring", className="text-center mb-4"),
+            html.P(
+                "View real-time validation stats, manage alerts, and inspect quality trends",
+                className="text-center"
+            )
+        ])
+    ]),
 
     html.H4("Stats", className='mt-4'),
     dash_table.DataTable(id='monitoring-stats-table', columns=[
@@ -112,6 +120,15 @@ def _handle_stats_refresh(n_clicks):
     return _stats_table_data()
 
 
+def _render_status_message(ok: bool, message: str):
+    """Render a status/error message as a color-coded dbc.Alert so errors are
+    visually distinct from success — a bare string previously rendered as
+    unstyled text regardless of whether it was good or bad news."""
+    if not message:
+        return ""
+    return dbc.Alert(message, color='success' if ok else 'danger')
+
+
 @callback(
     [Output('monitoring-alerts-table', 'data'), Output('monitoring-alerts-message', 'children')],
     [Input('monitoring-ack-btn', 'n_clicks'),
@@ -122,12 +139,12 @@ def _handle_stats_refresh(n_clicks):
 )
 def _handle_alert_actions(ack_clicks, resolve_clicks, refresh_clicks, alert_id):
     triggered = dash.ctx.triggered_id
-    message = ""
+    ok, message = True, ""
     if triggered == 'monitoring-ack-btn':
-        _ok, message = _acknowledge_alert_by_id(alert_id)
+        ok, message = _acknowledge_alert_by_id(alert_id)
     elif triggered == 'monitoring-resolve-btn':
-        _ok, message = _resolve_alert_by_id(alert_id)
-    return _alerts_table_data(), message
+        ok, message = _resolve_alert_by_id(alert_id)
+    return _alerts_table_data(), _render_status_message(ok, message)
 
 
 @callback(
@@ -137,9 +154,12 @@ def _handle_alert_actions(ack_clicks, resolve_clicks, refresh_clicks, alert_id):
     prevent_initial_call=True,
 )
 def _handle_trends_query(n_clicks, metric_name, hours):
-    _ok, message, rows = _quality_trends_rows(metric_name, hours)
+    ok, message, rows = _quality_trends_rows(metric_name, hours)
     if not rows:
-        return message
+        # A real validation error (ok=False, e.g. "Metric name is required")
+        # must read as an error; "no trend data found" is a neutral status,
+        # not a failure, so it gets a neutral color instead of danger.
+        return dbc.Alert(message, color='danger' if not ok else 'info')
     return dash_table.DataTable(
         columns=[
             {'name': 'Timestamp', 'id': 'timestamp'},
