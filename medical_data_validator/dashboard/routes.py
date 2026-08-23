@@ -7,8 +7,11 @@ for the unified Flask application.
 
 import logging
 import os
+import sqlite3
 import tempfile
+import threading
 import traceback
+from collections.abc import MutableSequence
 from pathlib import Path
 from flask import render_template, request, jsonify, Blueprint, current_app, redirect
 import pandas as pd
@@ -763,12 +766,110 @@ def api_templates():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-# Global storage for custom rules (in-memory for now)
-_custom_rules_storage = []
+# Custom compliance rules, shared across worker processes via SQLite. A
+# plain in-memory list was invisible across Gunicorn's separate worker
+# processes -- a rule added on worker A never existed as far as worker B
+# was concerned, so requests failed or succeeded depending on which worker
+# happened to handle them. See _sqlite_store.py for the same pattern used
+# by audit.py/jobs.py/registry.py.
+_CUSTOM_RULES_DEFAULT_DB = os.path.join(
+    os.environ.get('CUSTOM_RULES_DB_DIR', os.path.expanduser('~/.medical_validator')),
+    'custom_rules.db'
+)
+CUSTOM_RULES_DB_PATH = os.environ.get('CUSTOM_RULES_DB_PATH', _CUSTOM_RULES_DEFAULT_DB)
+
+_custom_rules_lock = threading.Lock()
+_custom_rules_conn: Optional[sqlite3.Connection] = None
+
+
+def _get_custom_rules_conn() -> sqlite3.Connection:
+    global _custom_rules_conn
+    if _custom_rules_conn is None:
+        from .._sqlite_store import connect
+        _custom_rules_conn = connect(CUSTOM_RULES_DB_PATH, 'custom_rules.db')
+        _custom_rules_conn.row_factory = sqlite3.Row
+        _custom_rules_conn.executescript("""
+            CREATE TABLE IF NOT EXISTS custom_rules (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                name          TEXT NOT NULL UNIQUE,
+                pattern       TEXT NOT NULL,
+                severity      TEXT NOT NULL,
+                field_pattern TEXT,
+                description   TEXT,
+                recommendation TEXT
+            );
+        """)
+        _custom_rules_conn.commit()
+    return _custom_rules_conn
+
+
+class _CustomRulesStore(MutableSequence):
+    """List-like view over the `custom_rules` table (ordered by insertion),
+    so every call site (routes.py, dashboard/pages/custom_rules.py, tests)
+    keeps using plain list operations -- append/pop/index/iterate -- while
+    the actual data lives in SQLite instead of one worker's private memory."""
+
+    @staticmethod
+    def _to_dict(row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            'name': row['name'], 'pattern': row['pattern'], 'severity': row['severity'],
+            'field_pattern': row['field_pattern'], 'description': row['description'] or '',
+            'recommendation': row['recommendation'],
+        }
+
+    def _rows(self):
+        return _get_custom_rules_conn().execute(
+            "SELECT name, pattern, severity, field_pattern, description, recommendation "
+            "FROM custom_rules ORDER BY id"
+        ).fetchall()
+
+    def __len__(self) -> int:
+        return len(self._rows())
+
+    def __iter__(self):
+        return iter(self._to_dict(r) for r in self._rows())
+
+    def __getitem__(self, index):
+        return self._to_dict(self._rows()[index])
+
+    def __setitem__(self, index, value):
+        # Every real call site only ever replaces a rule matched by its own
+        # (unchanged) name -- see api_add_custom_rule's update branch.
+        name = self._rows()[index]['name']
+        with _custom_rules_lock:
+            conn = _get_custom_rules_conn()
+            conn.execute(
+                "UPDATE custom_rules SET pattern=?, severity=?, field_pattern=?, "
+                "description=?, recommendation=? WHERE name=?",
+                (value['pattern'], value.get('severity', 'medium'), value.get('field_pattern'),
+                 value.get('description', ''), value.get('recommendation'), name),
+            )
+            conn.commit()
+
+    def __delitem__(self, index):
+        name = self._rows()[index]['name']
+        with _custom_rules_lock:
+            conn = _get_custom_rules_conn()
+            conn.execute("DELETE FROM custom_rules WHERE name = ?", (name,))
+            conn.commit()
+
+    def insert(self, index, value):
+        with _custom_rules_lock:
+            conn = _get_custom_rules_conn()
+            conn.execute(
+                "INSERT INTO custom_rules (name, pattern, severity, field_pattern, description, recommendation) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (value['name'], value['pattern'], value.get('severity', 'medium'), value.get('field_pattern'),
+                 value.get('description', ''), value.get('recommendation')),
+            )
+            conn.commit()
+
+
+_custom_rules_storage = _CustomRulesStore()
 
 def api_custom_rules():
     """Get custom compliance rules."""
-    return jsonify(_custom_rules_storage)
+    return jsonify(list(_custom_rules_storage))
 
 
 def api_add_custom_rule():

@@ -14,7 +14,10 @@ import os
 import hashlib
 import hmac
 import secrets
+import sqlite3
+import threading
 import time
+from collections.abc import MutableMapping
 from datetime import datetime, timezone, timedelta
 from functools import wraps
 from typing import Dict, List, Optional, Any
@@ -32,7 +35,17 @@ ROLES = ('admin', 'data-steward', 'read-only')
 ROLE_HIERARCHY = {'admin': 3, 'data-steward': 2, 'read-only': 1}
 
 
-# ── In-memory user store (replace with DB in production) ─────────────────────
+# ── User/tenant store (SQLite-backed, shared across worker processes) ───────
+#
+# A plain in-memory dict here was invisible across Gunicorn's separate
+# worker processes: a user or tenant created on worker A didn't exist as
+# far as worker B was concerned, so an immediately-following request (e.g.
+# deactivate right after create) failed or succeeded depending on which
+# worker handled it. _USERS/_TENANTS below keep the exact same dict
+# interface every call site (and every existing test) already uses --
+# `x in _USERS`, `_USERS[k]`, `_USERS[k] = {...}`, `.pop()`, `.items()`,
+# `.clear()`/`.update()` for snapshot/restore -- but the data itself lives
+# in SQLite, matching the pattern already used by audit.py/jobs.py/registry.py.
 
 def _hash_password(password: str) -> str:
     salt = secrets.token_hex(16)
@@ -49,21 +62,136 @@ def _verify_password(password: str, stored: str) -> bool:
         return False
 
 
-# Default admin seeded from env; nothing is hardcoded in source.
-_ADMIN_PASSWORD_HASH = _hash_password(os.environ.get('ADMIN_PASSWORD', 'change-me'))
+_DEFAULT_DB = os.path.join(
+    os.environ.get('AUTH_DB_DIR', os.path.expanduser('~/.medical_validator')),
+    'auth.db'
+)
+AUTH_DB_PATH = os.environ.get('AUTH_DB_PATH', _DEFAULT_DB)
 
-_USERS: Dict[str, Dict[str, Any]] = {
-    'admin': {
-        'password_hash': _ADMIN_PASSWORD_HASH,
-        'role': 'admin',
-        'tenant': 'default',
-        'active': True,
-    },
-}
+_lock = threading.Lock()
+_conn: Optional[sqlite3.Connection] = None
 
-_TENANTS: Dict[str, Dict[str, Any]] = {
-    'default': {'name': 'Default Tenant', 'api_key': os.environ.get('DEFAULT_TENANT_API_KEY', '')},
-}
+
+def _get_conn() -> sqlite3.Connection:
+    global _conn
+    if _conn is None:
+        from ._sqlite_store import connect
+        _conn = connect(AUTH_DB_PATH, 'auth.db')
+        _conn.row_factory = sqlite3.Row
+        _init_schema(_conn)
+        _seed_defaults_if_empty(_conn)
+    return _conn
+
+
+def _init_schema(conn: sqlite3.Connection) -> None:
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS users (
+            username      TEXT PRIMARY KEY,
+            password_hash TEXT NOT NULL,
+            role          TEXT NOT NULL,
+            tenant        TEXT NOT NULL,
+            active        INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE TABLE IF NOT EXISTS tenants (
+            tenant_id TEXT PRIMARY KEY,
+            name      TEXT NOT NULL,
+            api_key   TEXT NOT NULL
+        );
+    """)
+    conn.commit()
+
+
+def _seed_defaults_if_empty(conn: sqlite3.Connection) -> None:
+    """First-boot bootstrap only -- never overwrites an existing admin
+    account or default tenant on a later restart, so a since-changed
+    ADMIN_PASSWORD env var or a manually-edited tenant record isn't
+    silently reset every time the process restarts."""
+    if conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
+        conn.execute(
+            "INSERT INTO users (username, password_hash, role, tenant, active) VALUES (?, ?, ?, ?, 1)",
+            ('admin', _hash_password(os.environ.get('ADMIN_PASSWORD', 'change-me')), 'admin', 'default'),
+        )
+    if conn.execute("SELECT COUNT(*) FROM tenants").fetchone()[0] == 0:
+        conn.execute(
+            "INSERT INTO tenants (tenant_id, name, api_key) VALUES (?, ?, ?)",
+            ('default', 'Default Tenant', os.environ.get('DEFAULT_TENANT_API_KEY', '')),
+        )
+    conn.commit()
+
+
+class _UsersStore(MutableMapping):
+    def __getitem__(self, username):
+        row = _get_conn().execute(
+            "SELECT password_hash, role, tenant, active FROM users WHERE username = ?", (username,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(username)
+        return {'password_hash': row['password_hash'], 'role': row['role'],
+                'tenant': row['tenant'], 'active': bool(row['active'])}
+
+    def __setitem__(self, username, value):
+        with _lock:
+            conn = _get_conn()
+            conn.execute(
+                "INSERT INTO users (username, password_hash, role, tenant, active) VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(username) DO UPDATE SET password_hash=excluded.password_hash, "
+                "role=excluded.role, tenant=excluded.tenant, active=excluded.active",
+                (username, value['password_hash'], value['role'], value['tenant'],
+                 int(bool(value.get('active', True)))),
+            )
+            conn.commit()
+
+    def __delitem__(self, username):
+        with _lock:
+            conn = _get_conn()
+            cur = conn.execute("DELETE FROM users WHERE username = ?", (username,))
+            conn.commit()
+            if cur.rowcount == 0:
+                raise KeyError(username)
+
+    def __iter__(self):
+        return iter(r['username'] for r in _get_conn().execute("SELECT username FROM users"))
+
+    def __len__(self):
+        return _get_conn().execute("SELECT COUNT(*) FROM users").fetchone()[0]
+
+
+class _TenantsStore(MutableMapping):
+    def __getitem__(self, tenant_id):
+        row = _get_conn().execute(
+            "SELECT name, api_key FROM tenants WHERE tenant_id = ?", (tenant_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(tenant_id)
+        return {'name': row['name'], 'api_key': row['api_key']}
+
+    def __setitem__(self, tenant_id, value):
+        with _lock:
+            conn = _get_conn()
+            conn.execute(
+                "INSERT INTO tenants (tenant_id, name, api_key) VALUES (?, ?, ?) "
+                "ON CONFLICT(tenant_id) DO UPDATE SET name=excluded.name, api_key=excluded.api_key",
+                (tenant_id, value['name'], value['api_key']),
+            )
+            conn.commit()
+
+    def __delitem__(self, tenant_id):
+        with _lock:
+            conn = _get_conn()
+            cur = conn.execute("DELETE FROM tenants WHERE tenant_id = ?", (tenant_id,))
+            conn.commit()
+            if cur.rowcount == 0:
+                raise KeyError(tenant_id)
+
+    def __iter__(self):
+        return iter(r['tenant_id'] for r in _get_conn().execute("SELECT tenant_id FROM tenants"))
+
+    def __len__(self):
+        return _get_conn().execute("SELECT COUNT(*) FROM tenants").fetchone()[0]
+
+
+_USERS: MutableMapping = _UsersStore()
+_TENANTS: MutableMapping = _TenantsStore()
 
 
 # ── Token helpers ─────────────────────────────────────────────────────────────
@@ -195,7 +323,12 @@ def create_user_account(username: str, password: str, role: str = 'read-only', t
 def deactivate_user_account(username: str) -> None:
     if username not in _USERS:
         raise ValueError('User not found')
-    _USERS[username]['active'] = False
+    # Fetch-modify-writeback rather than `_USERS[username]['active'] = False`:
+    # __getitem__ builds a fresh dict from the DB on every call, so mutating
+    # it in place would touch only that throwaway dict, never persisting.
+    user = _USERS[username]
+    user['active'] = False
+    _USERS[username] = user
 
 
 def create_tenant_account(tenant_id: str, name: Optional[str] = None) -> Dict[str, Any]:

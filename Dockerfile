@@ -28,10 +28,12 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
     PORT=8000 \
     FLASK_ENV=production \
-    # Audit + job store location inside the container
+    # Audit + job + auth + custom-rules store location inside the container
     AUDIT_DB_DIR=/data \
     JOBS_DB_DIR=/data \
-    REGISTRY_DB_PATH=/data/registry.db
+    REGISTRY_DB_PATH=/data/registry.db \
+    AUTH_DB_DIR=/data \
+    CUSTOM_RULES_DB_DIR=/data
 
 # Runtime system deps only — gosu lets the entrypoint drop root privileges
 # after fixing up /data's ownership (see docker-entrypoint.sh)

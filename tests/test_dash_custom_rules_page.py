@@ -105,3 +105,23 @@ def test_handle_rules_actions_remove_routes_correctly_and_does_not_add():
     # Proves the add branch (which would use the pattern/severity args) never
     # ran — no rule was (re-)created from the same form fields.
     assert not any(r['pattern'] == r'\bshould-not-be-added\b' for r in rows)
+
+
+def test_rule_added_before_a_connection_reset_is_still_visible_after():
+    """Regression coverage for the bug this SQLite migration fixes: a plain
+    in-memory list was invisible across Gunicorn's separate worker
+    processes, so a rule added on one worker didn't exist as far as
+    another was concerned. Each worker only ever opens its own
+    sqlite3.Connection once (routes._get_custom_rules_conn() caches it in
+    `routes._custom_rules_conn`), so dropping and recreating that
+    connection mid-test stands in for "a different worker process reads
+    the same file"."""
+    from medical_data_validator.dashboard.pages.custom_rules import _add_custom_rule_from_form, _list_custom_rules_table_data
+
+    _add_custom_rule_from_form('persist-check-rule', r'\bpersist\b', 'high')
+
+    routes_module._custom_rules_conn.close()
+    routes_module._custom_rules_conn = None
+
+    rows = _list_custom_rules_table_data()
+    assert any(r['name'] == 'persist-check-rule' and r['severity'] == 'high' for r in rows)

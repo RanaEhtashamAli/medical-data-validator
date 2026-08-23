@@ -416,3 +416,31 @@ class TestRoleRequiredMultiRoleFix:
         for role in auth.ROLES:
             auth.role_required(role)  # must not raise
         auth.role_required('data-steward', 'admin')  # must not raise
+
+
+class TestUserTenantStoreSurvivesConnectionReset:
+    """Regression coverage for the bug this SQLite migration fixes: a plain
+    in-memory _USERS/_TENANTS dict was invisible across Gunicorn's separate
+    worker processes, so a user or tenant created on one worker didn't
+    exist as far as another was concerned. Each worker process only ever
+    opens its own sqlite3.Connection once (auth._get_conn() caches it in
+    `auth._conn`), so dropping and recreating that connection mid-test
+    stands in for "a different worker process reads the same file"."""
+
+    def test_user_created_before_a_connection_reset_is_still_visible_after(self):
+        auth.create_user_account('persist-check-user', 'password123', role='read-only')
+
+        auth._conn.close()
+        auth._conn = None
+
+        assert 'persist-check-user' in auth._USERS
+        assert auth._USERS['persist-check-user']['role'] == 'read-only'
+
+    def test_tenant_created_before_a_connection_reset_is_still_visible_after(self):
+        auth.create_tenant_account('persist-check-tenant', 'Persistence Check')
+
+        auth._conn.close()
+        auth._conn = None
+
+        assert 'persist-check-tenant' in auth._TENANTS
+        assert auth._TENANTS['persist-check-tenant']['name'] == 'Persistence Check'
