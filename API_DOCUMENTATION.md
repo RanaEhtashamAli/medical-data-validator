@@ -13,9 +13,23 @@ https://medical-data-validator-production.up.railway.app/v1.2
 https://medical-data-validator-production.up.railway.app/api
 ```
 
+## Routing structure
+
+There are three overlapping route mechanisms, and not every endpoint exists on every one:
+
+- **`/v1.2/*`** — flask-restx Swagger `Namespace` wrapping the v1.2 feature set (health, validate/data, validate/file, compliance/check, profiles, standards). Documented at `/docs`.
+- **`/api/*` (Namespace)** — the same handful of endpoints as above, also exposed under the legacy `/api` path via a second Namespace, for backward compatibility.
+- **`/api/*` (plain Flask Blueprint)** — everything else: `/api/compliance/v1.2`, `/api/compliance/templates`, `/api/compliance/custom-rules`, `/api/anonymize`, `/api/analytics`, `/api/monitoring/*`, plus the Security, Registry, Jobs, Reports, and Auth endpoints documented below. These only exist under `/api`, not `/v1.2`.
+
+`flask-restx`'s `marshal_with` response schemas drop any field not declared on the schema and null out declared fields the handler didn't populate — so a few "documented" v1.2 response fields (`risk_assessment`, `analytics` on `/validate/data`) are aspirational placeholders in the current implementation rather than populated data. The `compliance_report` returned by `/validate/data` and `/validate/file` is populated and nested under `summary.compliance_report` in the underlying `ValidationResult.to_dict()`.
+
 ## Authentication
 
-Currently, the API operates without authentication for development. For production deployment, implement appropriate authentication mechanisms.
+Most validation/compliance/analytics/monitoring endpoints (`/api/validate/*`, `/api/compliance/*`, `/api/security/*`, `/api/analytics`, `/api/monitoring/*`, `/api/anonymize`, and all `/v1.2/*` equivalents) run **without authentication** — suitable for development, or production behind your own access controls.
+
+**Auth, Registry, Jobs, Reports, and Audit endpoints require a JWT.** Obtain one from `POST /api/auth/token`, then send it as `Authorization: Bearer <token>` on every subsequent request to those endpoints. Three roles form a hierarchy — `admin` > `data-steward` > `read-only` — and each protected endpoint requires at least one specific role level (see the per-endpoint tables below). A user can only see/act on their own tenant's data unless they hold the `admin` role, which can see/act across tenants (and, for list/create endpoints, pass an explicit `tenant` query param or body field to target a tenant other than their own).
+
+For production deployment, always set `JWT_SECRET`, `SECRET_KEY`, and `ADMIN_PASSWORD` via environment variables — see [Configuration](README.md#configuration).
 
 ## API v1.2 Endpoints
 
@@ -60,6 +74,20 @@ Validate structured JSON data for medical compliance with advanced v1.2 features
 - `standards` (array): Medical standards to check (icd10, loinc, cpt, hipaa, gdpr, fda)
 - `compliance_template` (string): Use predefined compliance template
 - `risk_assessment` (boolean): Enable risk assessment (default: true)
+- `validators` (string, JSON-encoded): per-column rules, applied on top of `detect_phi`/`quality_checks`/`profile`. Shape:
+  ```json
+  {
+    "required_columns": ["patient_id"],
+    "column_types": {"age": "int"},
+    "ranges": {"age": {"min": 0, "max": 120}},
+    "date_columns": ["visit_date"],
+    "min_date": "2020-01-01",
+    "max_date": "2026-12-31",
+    "code_columns": {"diagnosis_code": "icd10", "procedure_code": "cpt"}
+  }
+  ```
+- `batch_size` (integer): when set and `> 0`, validates in batches via `BatchValidator` instead of a single pass (useful for very large payloads)
+- `use_cache` (boolean, default: false): reuse cached results across identical requests. Only takes effect when `batch_size` is set **and** `validators` is not — a per-request rule config can't be represented in the cache key, so configured requests always run uncached
 
 **Response:**
 ```json
@@ -146,6 +174,8 @@ Upload and validate medical data files (CSV, Excel, JSON, Parquet) with v1.2 com
 - `standards`: Array of standards to check
 - `compliance_template`: Use predefined compliance template
 - `risk_assessment`: Enable risk assessment (true/false)
+- `validators`: JSON-encoded per-column rules — same shape as `/validate/data`'s `validators` param
+- `batch_size`, `use_cache`: same semantics as `/validate/data`
 
 **Supported Formats:**
 - CSV (.csv)
@@ -395,6 +425,107 @@ The following v1.0 endpoints remain functional for backward compatibility:
 
 ### Get Standards Information (v1.0)
 **GET** `/api/standards`
+
+## Security Endpoints
+
+No authentication required. Each accepts a file upload (`multipart/form-data`, field `file`) or JSON body, same as `/api/validate/file` and `/api/validate/data`.
+
+### HIPAA Safe Harbor Check
+
+**POST** `/api/security/hipaa-check`
+
+Scans for HIPAA's 18 Safe Harbor PHI identifiers.
+
+**Query Parameters:**
+- `include_samples` (boolean, default: false): when false, each detected-PHI item reports `sample_count` instead of the raw `sample_values`
+
+**Response:**
+```json
+{
+  "phi_detected": [
+    {"column": "ssn", "identifier_type": "SSN", "sample_count": 3}
+  ],
+  "is_compliant": false,
+  "risk_level": "high"
+}
+```
+
+### Security Audit
+
+**POST** `/api/security/audit`
+
+Runs a security posture audit (file permissions, sanitization risk) against the uploaded data.
+
+### Data Sanitization
+
+**POST** `/api/security/sanitize`
+
+Strips HTML tags, script injection, and SQL-injection-style characters from text columns.
+
+**Response:**
+```json
+{"success": true, "sanitized_data": [{"...": "..."}]}
+```
+
+## Registry Endpoints
+
+Dataset registry — tracks named datasets and their validation run history. All require a JWT (`Authorization: Bearer <token>`).
+
+| Method | Path | Role required | Description |
+|---|---|---|---|
+| GET | `/api/registry/datasets` | any | List datasets (own tenant; admins may pass `?tenant=`) |
+| POST | `/api/registry/datasets` | data-steward+ | Register a dataset (`{"name", "description", "tags", "metadata"}`) |
+| GET | `/api/registry/datasets/<id>` | any | Get one dataset (own tenant only, unless admin) |
+| PATCH | `/api/registry/datasets/<id>` | data-steward+ | Update `description`/`tags`/`metadata` |
+| DELETE | `/api/registry/datasets/<id>` | admin | Remove a dataset |
+| GET | `/api/registry/datasets/<id>/history` | any | Paginated validation run history (`?limit=&offset=`) |
+| POST | `/api/registry/datasets/<id>/runs` | data-steward+ | Record a run (`{"audit_id", "is_valid", "error_count", "warning_count"}`) |
+
+Non-admin callers are clamped to their own tenant on create (`tenant` in the body is ignored unless the caller is `admin`) and get `403 Forbidden` reading/updating another tenant's dataset.
+
+## Jobs Endpoints
+
+Async validation/anonymize job queue (SQLite-backed, background worker; Celery+Redis if the `[celery]` extra is installed). Requires a JWT.
+
+| Method | Path | Role required | Description |
+|---|---|---|---|
+| POST | `/api/jobs` | data-steward+ | Submit a job: `{"job_type": "validate"\|"anonymize", "payload": {...}}` → `202` with the created job |
+| GET | `/api/jobs` | any | List jobs (own tenant; admins may pass `?tenant=&status=&limit=&offset=`) |
+| GET | `/api/jobs/<id>` | any | Poll status / fetch result (`pending` → `running` → `completed`\|`failed`) |
+
+## Reports Endpoints
+
+Generate PDF/CSV validation reports. Requires a JWT.
+
+| Method | Path | Role required | Description |
+|---|---|---|---|
+| GET | `/api/report/<job_id>/pdf` | any | PDF built from a completed job's stored result (404 if missing, 409 if job isn't `completed`) |
+| GET | `/api/report/<job_id>/csv` | any | Same, as CSV |
+| POST | `/api/report/inline/pdf` | any | PDF built directly from a posted `result_dict` (no job needed) |
+| POST | `/api/report/inline/csv` | any | Same, as CSV |
+
+PDFs cap issue listings at the first 200 rows, noting the true total when truncated.
+
+## Auth Endpoints
+
+| Method | Path | Role required | Description |
+|---|---|---|---|
+| POST | `/api/auth/token` | none | `{"username", "password"}` → JWT + `expires_in`, `role`, `tenant` |
+| GET | `/api/auth/me` | any (valid JWT) | `{"username", "role", "tenant"}` for the caller |
+| GET | `/api/auth/users` | admin | List user accounts |
+| POST | `/api/auth/users` | admin | `{"username", "password", "role", "tenant"}` → `201` |
+| DELETE | `/api/auth/users/<username>` | admin | Deactivate a user (400 if deactivating yourself) |
+| POST | `/api/auth/tenants` | admin | `{"tenant_id", "name"}` → `201` with a generated `api_key` |
+
+## Audit Endpoint
+
+**GET** `/api/audit` — role required: data-steward+
+
+Query the append-only audit trail.
+
+**Query Parameters:** `tenant` (admin only — non-admins are always scoped to their own tenant), `username`, `dataset_id`, `event_type`, `since`, `until`, `limit` (max 1000), `offset`
+
+**Response:** `{"total": <int>, "records": [...]}`
 
 ## Error Handling
 
