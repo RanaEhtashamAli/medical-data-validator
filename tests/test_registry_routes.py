@@ -20,36 +20,47 @@ Setup patterns reused from other test files in this suite:
 - create_dashboard_app() + app.test_client(), module-scoped client, same as
   tests/test_auth.py and tests/test_flask_api_v12_endpoints.py.
 
-DISCOVERED BUG -- role_required() with multiple roles collapses to the
+FIXED BUG -- role_required() with multiple roles used to collapse to the
 HIGHEST role's level, not "any of these roles" (see auth.py:137-149):
 
     caller_level = ROLE_HIERARCHY.get(g.role, 0)
-    required_level = max(ROLE_HIERARCHY.get(r, 0) for r in required_roles)
+    required_level = max(ROLE_HIERARCHY.get(r, 0) for r in required_roles)  # bug
     if caller_level < required_level:
         return 403
 
 For `@role_required('data-steward', 'admin')` (used on create_dataset_endpoint,
 update_dataset_endpoint, and record_run_endpoint below, and also in jobs.py
-and audit.py -- out of scope here), required_level = max(2, 3) = 3, i.e.
-admin's level. A data-steward (level 2) can therefore NEVER satisfy this
-check, despite being explicitly named as an allowed role. In effect,
-`role_required('data-steward', 'admin')` behaves identically to
-`role_required('admin')` alone. This is a real, previously-unexercised bug:
-every one of these "data-steward or admin" endpoints is actually
-admin-only in production.
+and audit.py -- out of scope here), required_level used to be max(2, 3) = 3,
+i.e. admin's level. A data-steward (level 2) could therefore NEVER satisfy
+this check, despite being explicitly named as an allowed role. In effect,
+`role_required('data-steward', 'admin')` behaved identically to
+`role_required('admin')` alone -- every one of these "data-steward or admin"
+endpoints was actually admin-only in production.
 
-This is documented (not fixed) per the plan's guidance, and it reshapes what
-"happy path" means for the affected endpoints below: since only admin can
-ever pass the decorator, admin is used for their happy-path tests, and a
-dedicated test on each affected endpoint demonstrates a data-steward being
-incorrectly rejected.
+This has been FIXED: role_required() now takes `min()` of the named roles'
+levels, so required_level = min(2, 3) = 2, and both data-steward and admin
+pass while read-only (level 1) still correctly fails. The tests below have
+been updated accordingly: a data-steward can now reach create/update/
+record-run for their own tenant's resources (200/201), and a dedicated test
+on each affected endpoint proves cross-tenant access is still correctly
+forbidden (403) now that data-stewards can reach the decorator body at all.
 
-A second, related consequence: because only admin can reach
-update_dataset_endpoint and record_run_endpoint, their internal
-`g.role != 'admin' and ds.get('tenant') != g.tenant` cross-tenant check is
-DEAD CODE in the current build -- admin always satisfies `g.role == 'admin'`
-and skips it, and no non-admin caller can even reach the decorator body to
-trigger it. This is noted below rather than faked with an unreachable test.
+A related fix shipped alongside this one: create_dataset_endpoint previously
+had no tenant clamp for non-admin callers (unlike list_datasets_endpoint,
+which already clamped correctly). Once data-stewards could reach
+create_dataset_endpoint, that missing clamp would have let a data-steward
+plant a dataset under an arbitrary tenant name via the request body. This is
+now clamped the same way list_datasets_endpoint is:
+`tenant = g.tenant if g.role != 'admin' else data.get('tenant', g.tenant)`.
+See TestCreateDataset.test_data_steward_tenant_is_clamped_to_own_tenant
+below.
+
+A second consequence of the role_required fix: update_dataset_endpoint and
+record_run_endpoint's internal `g.role != 'admin' and ds.get('tenant') !=
+g.tenant` cross-tenant check was previously DEAD CODE -- only admin could
+ever reach the decorator body, and admin always satisfies
+`g.role == 'admin'` and skips the check. Data-stewards can now reach it for
+the first time; dedicated tests below prove it actually fires.
 """
 
 import os
@@ -144,7 +155,7 @@ def _create_via_api(client, token, name, **extra):
 def _seed(name, tenant, **kw):
     """Seed a dataset directly through the registry module (bypassing HTTP),
     so tests of GET/PATCH/DELETE/history/record-run aren't entangled with
-    create_dataset_endpoint's own role gating (see the role_required bug
+    create_dataset_endpoint's own role gating (see the role_required fix
     documented at module level)."""
     return registry.register_dataset(name, tenant=tenant, **kw)
 
@@ -190,15 +201,39 @@ class TestCreateDataset:
         resp = client.post('/api/registry/datasets', json={'name': 'ds-no-auth'})
         assert resp.status_code == 401
 
-    def test_BUG_role_required_blocks_named_data_steward_role(self, client, steward_a_token):
-        """DISCOVERED BUG (documented, not fixed): the decorator on this
-        route is `@role_required('data-steward', 'admin')`, explicitly
-        naming data-steward as an allowed role, but role_required()'s
-        max()-based level check makes it admin-only in practice (see module
-        docstring). A data-steward is incorrectly forbidden from creating a
-        dataset at all -- even one scoped to their own tenant."""
-        resp = _create_via_api(client, steward_a_token, 'ds-steward-blocked')
-        assert resp.status_code == 403
+    def test_data_steward_can_create_dataset_for_own_tenant(self, client, steward_a_token):
+        """Regression test for the fixed role_required() bug: the decorator
+        on this route is `@role_required('data-steward', 'admin')`,
+        explicitly naming data-steward as an allowed role. Before the fix,
+        role_required()'s max()-based level check made this admin-only in
+        practice; a data-steward was incorrectly forbidden from creating a
+        dataset at all, even one scoped to their own tenant. After the fix
+        (min()-based level check), a data-steward can create a dataset for
+        their own tenant."""
+        resp = _create_via_api(client, steward_a_token, 'ds-steward-created')
+        assert resp.status_code == 201
+        body = resp.get_json()
+        assert body['name'] == 'ds-steward-created'
+        assert body['tenant'] == 'registry-tenant-a'
+
+    def test_data_steward_tenant_is_clamped_to_own_tenant(self, client, steward_a_token):
+        """Regression test for Fix 1b: create_dataset_endpoint previously
+        had no tenant clamp for non-admin callers (unlike
+        list_datasets_endpoint, which already clamped correctly). Now that
+        the role_required() fix lets data-stewards reach this endpoint,
+        the missing clamp would have let a data-steward for tenant A plant
+        a dataset registered under tenant B's name simply by including
+        "tenant": "tenant-B" in the POST body. The endpoint must instead
+        ignore the requested tenant for non-admins and use the caller's
+        own tenant."""
+        resp = _create_via_api(client, steward_a_token, 'ds-steward-tenant-spoof-attempt',
+                                tenant='registry-tenant-b')
+        assert resp.status_code == 201
+        body = resp.get_json()
+        assert body['tenant'] == 'registry-tenant-a'
+
+        stored = registry.get_dataset(body['id'])
+        assert stored['tenant'] == 'registry-tenant-a'
 
     def test_read_only_role_forbidden(self, client, readonly_a_token):
         resp = _create_via_api(client, readonly_a_token, 'ds-readonly-attempt')
@@ -228,8 +263,8 @@ class TestListDatasets:
     def test_non_admin_tenant_query_param_is_ignored(self, client, steward_a_token):
         """A non-admin cannot use ?tenant= to peek at another tenant's list --
         list_datasets_endpoint correctly forces tenant=g.tenant for
-        non-admins. (Contrast with create_dataset_endpoint's missing clamp,
-        documented above.)"""
+        non-admins. (create_dataset_endpoint now clamps the same way --
+        see TestCreateDataset.test_data_steward_tenant_is_clamped_to_own_tenant.)"""
         _seed('list-b-only', 'registry-tenant-b')
         resp = client.get('/api/registry/datasets?tenant=registry-tenant-b',
                            headers=_auth_header(steward_a_token))
@@ -353,21 +388,35 @@ class TestUpdateDataset:
                              headers=_auth_header(readonly_a_token))
         assert resp.status_code == 403
 
-    def test_BUG_role_required_blocks_data_steward_even_on_own_dataset(self, client, steward_a_token):
-        """DISCOVERED BUG (documented, not fixed): same role_required() flaw
-        as create_dataset_endpoint. A data-steward cannot update even their
-        OWN tenant's dataset, despite 'data-steward' being named explicitly
-        in @role_required('data-steward', 'admin'). Consequence: because
-        only admin can ever pass this decorator, and admin always bypasses
-        the internal `ds.get('tenant') != g.tenant` check, that internal
-        cross-tenant-403 branch is dead code in the current build -- no
-        caller can reach it. Not tested here for that reason."""
+    def test_data_steward_can_update_own_tenant_dataset(self, client, steward_a_token):
+        """Regression test for the fixed role_required() bug: same flaw as
+        create_dataset_endpoint. Before the fix, a data-steward could not
+        update even their OWN tenant's dataset, despite 'data-steward' being
+        named explicitly in @role_required('data-steward', 'admin'). After
+        the fix, a data-steward can update their own tenant's dataset."""
         created = _seed('update-steward-own', 'registry-tenant-a', description='original')
         resp = client.patch(f"/api/registry/datasets/{created['id']}",
                              json={'description': 'attempted-update'},
                              headers=_auth_header(steward_a_token))
+        assert resp.status_code == 200
+        assert resp.get_json()['description'] == 'attempted-update'
+        updated = registry.get_dataset(created['id'])
+        assert updated['description'] == 'attempted-update'
+
+    def test_data_steward_cross_tenant_update_forbidden(self, client, steward_a_token):
+        """Regression test for previously-dead code: update_dataset_endpoint's
+        internal `g.role != 'admin' and ds.get('tenant') != g.tenant` check
+        was unreachable before the role_required() fix, since only admin
+        could ever pass the decorator (and admin always bypasses this
+        check). Now that a data-steward can reach the decorator body, this
+        is the first test to actually exercise it: a data-steward from
+        tenant A must be forbidden from updating a tenant B dataset."""
+        other = _seed('update-cross-tenant', 'registry-tenant-b', description='original')
+        resp = client.patch(f"/api/registry/datasets/{other['id']}",
+                             json={'description': 'attempted-update'},
+                             headers=_auth_header(steward_a_token))
         assert resp.status_code == 403
-        unchanged = registry.get_dataset(created['id'])
+        unchanged = registry.get_dataset(other['id'])
         assert unchanged['description'] == 'original'
 
 
@@ -493,14 +542,30 @@ class TestRecordRun:
                             json={}, headers=_auth_header(readonly_a_token))
         assert resp.status_code == 403
 
-    def test_BUG_role_required_blocks_data_steward_even_on_own_dataset(self, client, steward_a_token):
-        """DISCOVERED BUG (documented, not fixed): same role_required() flaw
-        as create/update. A data-steward cannot record a run against even
-        their OWN dataset. As with update_dataset_endpoint, this also makes
-        the internal cross-tenant-403 check unreachable dead code (only
-        admin ever reaches it, and admin always bypasses it)."""
+    def test_data_steward_can_record_run_for_own_dataset(self, client, steward_a_token):
+        """Regression test for the fixed role_required() bug: same flaw as
+        create/update. Before the fix, a data-steward could not record a
+        run against even their OWN dataset. After the fix, they can."""
         created = _seed('record-run-steward-own', 'registry-tenant-a')
         resp = client.post(f"/api/registry/datasets/{created['id']}/runs",
+                            json={'is_valid': True, 'error_count': 0, 'warning_count': 1},
+                            headers=_auth_header(steward_a_token))
+        assert resp.status_code == 201
+        run_id = resp.get_json()['run_id']
+        assert run_id
+        history = registry.get_run_history(created['id'])
+        assert len(history) == 1
+        assert history[0]['id'] == run_id
+
+    def test_data_steward_cross_tenant_record_run_forbidden(self, client, steward_a_token):
+        """Regression test for previously-dead code: record_run_endpoint's
+        internal cross-tenant check was unreachable before the
+        role_required() fix (only admin ever reached the decorator body,
+        and admin always bypasses the check). Now that a data-steward can
+        reach it, a data-steward from tenant A must be forbidden from
+        recording a run against a tenant B dataset."""
+        other = _seed('record-run-cross-tenant', 'registry-tenant-b')
+        resp = client.post(f"/api/registry/datasets/{other['id']}/runs",
                             json={}, headers=_auth_header(steward_a_token))
         assert resp.status_code == 403
-        assert registry.get_run_history(created['id']) == []
+        assert registry.get_run_history(other['id']) == []

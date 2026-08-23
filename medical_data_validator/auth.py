@@ -141,7 +141,7 @@ def role_required(*required_roles: str):
         @login_required
         def decorated(*args, **kwargs):
             caller_level = ROLE_HIERARCHY.get(g.role, 0)
-            required_level = max(ROLE_HIERARCHY.get(r, 0) for r in required_roles)
+            required_level = min(ROLE_HIERARCHY.get(r, 0) for r in required_roles)
             if caller_level < required_level:
                 return jsonify({'error': f'Role {required_roles} required'}), 403
             return f(*args, **kwargs)

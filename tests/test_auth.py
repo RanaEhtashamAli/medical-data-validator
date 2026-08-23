@@ -314,38 +314,42 @@ class TestVerifyPasswordMalformedHash:
         assert resp.get_json()['error'] == 'Invalid credentials'
 
 
-class TestRoleRequiredMultiRoleBug:
-    """DISCOVERED BUG (documented, not fixed) -- this is the single
-    authoritative, source-level test of the bug independently found and
-    documented three times already in this same test-coverage-improvement
-    plan: via tests/test_registry_routes.py (create_dataset_endpoint,
-    update_dataset_endpoint, record_run_endpoint), tests/test_jobs.py, and
-    tests/test_audit.py -- all of which use
-    `@role_required('data-steward', 'admin')` on their REST endpoints and
-    found data-steward callers rejected.
+class TestRoleRequiredMultiRoleFix:
+    """Regression test for a bug that was found and fixed in this same
+    test-coverage-improvement effort, independently discovered three times
+    across tests/test_registry_routes.py (create_dataset_endpoint,
+    update_dataset_endpoint, record_run_endpoint), tests/test_job_routes.py,
+    and this file -- all exercising `@role_required('data-steward',
+    'admin')`-decorated REST endpoints and finding data-steward callers
+    incorrectly rejected.
 
-    Root cause, in role_required() itself (auth.py ~137-149):
+    Root cause, in role_required() itself (auth.py ~137-149), was:
 
         caller_level = ROLE_HIERARCHY.get(g.role, 0)
         required_level = max(ROLE_HIERARCHY.get(r, 0) for r in required_roles)
         if caller_level < required_level:
             return 403
 
-    `max()` picks the HIGHEST-ranked named role as the bar every caller must
-    clear, even though the decorator's own docstring says "require the
+    `max()` picked the HIGHEST-ranked named role as the bar every caller had
+    to clear, even though the decorator's own docstring says "require the
     caller to have one of the specified roles" (i.e. the caller should only
-    need to clear the LOWEST named role -- that would be `min()`). As a
-    result, `role_required('data-steward', 'admin')` is, in practice,
+    need to clear the LOWEST named role). As a result,
+    `role_required('data-steward', 'admin')` was, in practice,
     indistinguishable from `role_required('admin')` alone: a data-steward
-    (level 2) can never satisfy required_level = max(2, 3) = 3.
+    (level 2) could never satisfy required_level = max(2, 3) = 3.
 
-    This test reproduces the bug directly against role_required() with a
-    throwaway dummy view, independent of any specific downstream route, so
-    the bug has one authoritative source-level regression test rather than
-    living only inside three unrelated REST API test files.
+    The fix changes `max()` to `min()`, so required_level = min(2, 3) = 2,
+    letting both data-steward and admin through while still correctly
+    rejecting read-only (level 1).
+
+    This test reproduces the (now fixed) scenario directly against
+    role_required() with a throwaway dummy view, independent of any
+    specific downstream route, so the fix has one authoritative
+    source-level regression test rather than living only inside three
+    unrelated REST API test files.
     """
 
-    def test_role_required_bug_multi_role_decorator_is_effectively_highest_role_only(self):
+    def test_role_required_multi_role_decorator_allows_any_named_role(self):
         # A small standalone Flask app (per this task's own instructions:
         # "a small dummy route you register on a test app, if that's
         # cleaner for isolating a specific decorator branch"), rather than
@@ -361,12 +365,21 @@ class TestRoleRequiredMultiRoleBug:
             return jsonify({'ok': True})
 
         auth.create_user_account('auth-bug-steward-user', 'password123', role='data-steward')
-        token = auth.create_token('auth-bug-steward-user', 'data-steward', 'default')
+        steward_token = auth.create_token('auth-bug-steward-user', 'data-steward', 'default')
+
+        auth.create_user_account('auth-bug-readonly-user', 'password123', role='read-only')
+        readonly_token = auth.create_token('auth-bug-readonly-user', 'read-only', 'default')
 
         with dummy_app.test_client() as dummy_client:
-            resp = dummy_client.get('/dummy-multi-role', headers=_auth_header(token))
+            steward_resp = dummy_client.get('/dummy-multi-role', headers=_auth_header(steward_token))
+            readonly_resp = dummy_client.get('/dummy-multi-role', headers=_auth_header(readonly_token))
 
-        # BUG: a data-steward, explicitly named as an allowed role, is
-        # rejected because role_required() computes the *max* required
-        # level (admin's) instead of the *min* (data-steward's).
-        assert resp.status_code == 403
+        # FIXED: a data-steward, explicitly named as an allowed role, is now
+        # accepted because role_required() computes the *min* required
+        # level (data-steward's) instead of the *max* (admin's).
+        assert steward_resp.status_code == 200
+        assert steward_resp.get_json() == {'ok': True}
+
+        # read-only (level 1) still correctly fails: min(2, 3) = 2 is still
+        # above read-only's level, so the fix doesn't over-widen access.
+        assert readonly_resp.status_code == 403

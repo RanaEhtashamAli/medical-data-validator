@@ -283,7 +283,7 @@ def register_registry_routes(app) -> None:
         name = data.get('name', '').strip()
         if not name:
             return jsonify({'error': 'name is required'}), 400
-        tenant = data.get('tenant', g.tenant)
+        tenant = g.tenant if g.role != 'admin' else data.get('tenant', g.tenant)
         try:
             ds = register_dataset(
                 name,

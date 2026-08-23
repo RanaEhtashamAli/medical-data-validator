@@ -18,25 +18,32 @@ segfault the test process (reproduced 3/5 runs in an earlier session). Per
 the plan's global constraint, all test setup here uses jobs.create_job()
 directly (synchronous, no worker thread) instead of jobs.submit_job().
 
-The ONE exception is `TestSubmitJob.test_happy_path_admin_submits_real_job`,
-which exercises the actual submit endpoint end-to-end (the only way to prove
-it really enqueues a job for background processing) using the same
-"poll with a bounded retry loop" pattern already established in
-tests/test_dash_jobs_page.py's test_submit_job_from_form_then_appears_in_list.
-This is deliberately the ONLY new test in this file that starts a real async
-job, to minimize the number of chances to trigger the race.
+The exceptions are `TestSubmitJob.test_happy_path_admin_submits_real_job`
+and `TestSubmitJob.test_data_steward_can_submit_real_job` (the latter added
+as a regression test for the role_required() fix below -- proving a
+data-steward can now submit successfully requires actually exercising the
+submit endpoint, not just asserting a status code), which exercise the
+actual submit endpoint end-to-end (the only way to prove it really enqueues
+a job for background processing) using the same "poll with a bounded retry
+loop" pattern already established in tests/test_dash_jobs_page.py's
+test_submit_job_from_form_then_appears_in_list. Both tests poll to
+completion before returning, so each job finishes before its test's DB
+teardown runs, rather than leaving a job racing the teardown in the
+background -- this is deliberately still the minimum needed to prove the
+fixed behavior, not an invitation to add more real submissions here.
 
-DISCOVERED BUG (documented, not fixed, already known from Task 6) --
-role_required() with multiple roles collapses to the HIGHEST role's level,
-not "any of these roles" (see auth.py:137-149). submit_job_endpoint is
-decorated with `@role_required('data-steward', 'admin')` (jobs.py:267),
-so required_level = max(2, 3) = 3, i.e. admin's level. A data-steward
-(level 2) can therefore NEVER satisfy this check, despite being explicitly
-named as an allowed role -- in effect this endpoint is admin-only in
-production. This is exercised below (not re-litigated at length; see
-tests/test_registry_routes.py's module docstring for the full analysis).
-Because only admin can ever submit a job, admin is used for the happy-path
-submit tests.
+FIXED BUG (already known from Task 6, now resolved) -- role_required() with
+multiple roles used to collapse to the HIGHEST role's level, not "any of
+these roles" (see auth.py:137-149). submit_job_endpoint is decorated with
+`@role_required('data-steward', 'admin')` (jobs.py:267); before the fix,
+required_level = max(2, 3) = 3, i.e. admin's level, so a data-steward
+(level 2) could never satisfy this check despite being explicitly named as
+an allowed role -- in effect this endpoint was admin-only in production.
+role_required() now takes `min()` of the named roles' levels, so a
+data-steward can submit jobs too. This is exercised below (not
+re-litigated at length; see tests/test_registry_routes.py's module
+docstring for the full analysis). Both admin and data-steward happy-path
+submit tests are included below.
 """
 
 import json
@@ -158,19 +165,29 @@ class TestSubmitJob:
         resp = client.post('/api/jobs', json={'job_type': 'validate', 'payload': {}})
         assert resp.status_code == 401
 
-    def test_BUG_role_required_blocks_named_data_steward_role(self, client, steward_a_token):
-        """DISCOVERED BUG (documented, not fixed): the decorator on this
-        route is @role_required('data-steward', 'admin'), explicitly naming
-        data-steward as an allowed role, but role_required()'s max()-based
-        level check makes it admin-only in practice (see module docstring
-        and auth.py:137-149). A data-steward is incorrectly forbidden from
-        submitting any job at all."""
+    def test_data_steward_can_submit_real_job(self, client, steward_a_token):
+        """Regression test for the fixed role_required() bug: the decorator
+        on this route is @role_required('data-steward', 'admin'),
+        explicitly naming data-steward as an allowed role. Before the fix,
+        role_required()'s max()-based level check made it admin-only in
+        practice (see module docstring and auth.py:137-149), incorrectly
+        forbidding a data-steward from submitting any job at all. After the
+        fix, a data-steward can submit and the job actually runs to
+        completion, stamped with their own tenant/username."""
         resp = client.post(
             '/api/jobs',
             json={'job_type': 'validate', 'payload': {'data': {}}},
             headers=_auth_header(steward_a_token),
         )
-        assert resp.status_code == 403
+        assert resp.status_code == 202
+        body = resp.get_json()
+        assert body['job_type'] == 'validate'
+        assert body['tenant'] == 'jobs-tenant-a'
+        assert body['username'] == 'jobs-steward-a'
+
+        job = _wait_for_terminal(body['id'])
+        assert job is not None
+        assert job['status'] in ('completed', 'failed')
 
     def test_read_only_role_forbidden(self, client, readonly_a_token):
         resp = client.post(

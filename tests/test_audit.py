@@ -6,6 +6,7 @@ import pytest
 import pandas as pd
 
 import medical_data_validator.audit as audit
+import medical_data_validator.auth as auth
 
 
 @pytest.fixture(autouse=True)
@@ -158,3 +159,39 @@ class TestCoreIntegration:
         rows = audit.query_log(event_type='validation')
         assert len(rows) >= 1
         assert rows[0]['dataset_hash'] is not None
+
+
+class TestGetAuditLogRoute:
+    """Minimal REST-route regression test for GET /api/audit
+    (register_audit_routes' get_audit_log), which was previously untested
+    at the HTTP layer. get_audit_log is decorated with
+    `@role_required('data-steward', 'admin')`; before the role_required()
+    fix (auth.py's min()-vs-max() bug), a data-steward -- despite being
+    explicitly named as an allowed role -- was incorrectly rejected with
+    403. This is a lightweight happy-path check that a data-steward can now
+    reach the endpoint; broader coverage of get_audit_log's filtering was
+    not part of this effort's original scope."""
+
+    def test_data_steward_can_get_audit_log(self):
+        from medical_data_validator.dashboard.app import create_dashboard_app
+
+        username = 'audit-route-steward'
+        if username not in auth._USERS:
+            auth.create_user_account(username, 'password123', role='data-steward', tenant='audit-route-tenant')
+        try:
+            app = create_dashboard_app()
+            app.config['TESTING'] = True
+            with app.test_client() as client:
+                token_resp = client.post('/api/auth/token', json={
+                    'username': username, 'password': 'password123',
+                })
+                assert token_resp.status_code == 200
+                token = token_resp.get_json()['access_token']
+
+                resp = client.get('/api/audit', headers={'Authorization': f'Bearer {token}'})
+                assert resp.status_code == 200
+                body = resp.get_json()
+                assert 'total' in body
+                assert 'records' in body
+        finally:
+            auth._USERS.pop(username, None)
