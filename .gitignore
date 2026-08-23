@@ -481,7 +481,10 @@ test_downloaded_datasets.py
 download_real_datasets.py
 
 # Generated test result files
-covid19_validation.json 
+covid19_validation.json
 
 # Test files in base directory (not tests/ — see below)
 /test_*.py
+
+# Internal planning/spec docs (Claude Code working artifacts, not user-facing docs)
+docs/superpowers/
