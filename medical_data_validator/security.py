@@ -413,6 +413,14 @@ class DataSanitizer:
         return sanitized
 
 
+def _strip_phi_samples(report: dict) -> dict:
+    """Replace each phi_detected item's sample_values with a sample_count,
+    in place. Returns the same report object for convenient chaining."""
+    for item in report.get('phi_detected', []):
+        item['sample_count'] = len(item.pop('sample_values', []))
+    return report
+
+
 def register_security_routes(app) -> None:
     """Attach /api/security/* routes to a Flask app."""
     from flask import request, jsonify
@@ -435,8 +443,7 @@ def register_security_routes(app) -> None:
             include_samples = request.args.get('include_samples', 'false').lower() == 'true'
             report = HIPAAComplianceChecker().check_hipaa_compliance(df)
             if not include_samples:
-                for item in report.get('phi_detected', []):
-                    item['sample_count'] = len(item.pop('sample_values', []))
+                _strip_phi_samples(report)
             return jsonify(report)
         except ValueError as exc:
             return jsonify({'success': False, 'error': str(exc)}), 400
