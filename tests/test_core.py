@@ -5,6 +5,7 @@ Tests for the core medical data validator functionality.
 import pytest
 import pandas as pd
 from datetime import datetime
+from unittest.mock import patch
 
 from medical_data_validator.core import (
     MedicalDataValidator,
@@ -474,6 +475,161 @@ class TestMedicalDataValidator:
         assert "Invalid value" in report
         assert "Location: Column: col1, Row: 5" in report
         assert "Value: bad_value" in report
+
+
+class TestMedicalDataValidatorMonitoringLifecycle:
+    """Test start_monitoring/stop_monitoring delegation to the monitor
+    singleton imported into core.py. The monitor is patched per-test so
+    these tests don't spin up (or depend on) the real background thread."""
+
+    def test_start_monitoring_delegates_when_enabled(self):
+        with patch("medical_data_validator.core.monitor") as mock_monitor:
+            validator = MedicalDataValidator(enable_monitoring=True)
+            # __init__ itself calls start_monitoring() once.
+            assert mock_monitor.start_monitoring.call_count == 1
+
+            validator.start_monitoring()
+
+            assert mock_monitor.start_monitoring.call_count == 2
+
+    def test_start_monitoring_is_noop_when_disabled(self):
+        with patch("medical_data_validator.core.monitor") as mock_monitor:
+            validator = MedicalDataValidator(enable_monitoring=False)
+
+            validator.start_monitoring()
+
+            mock_monitor.start_monitoring.assert_not_called()
+
+    def test_start_monitoring_is_noop_when_monitor_unavailable(self):
+        with patch("medical_data_validator.core.monitor", None):
+            validator = MedicalDataValidator(enable_monitoring=True)
+            # Must not raise even though enable_monitoring is True.
+            validator.start_monitoring()
+
+    def test_stop_monitoring_delegates_to_singleton(self):
+        with patch("medical_data_validator.core.monitor") as mock_monitor:
+            validator = MedicalDataValidator(enable_monitoring=False)
+
+            validator.stop_monitoring()
+
+            mock_monitor.stop_monitoring.assert_called_once()
+
+    def test_stop_monitoring_is_noop_when_monitor_unavailable(self):
+        with patch("medical_data_validator.core.monitor", None):
+            validator = MedicalDataValidator(enable_monitoring=False)
+            # Must not raise.
+            validator.stop_monitoring()
+
+
+class TestMedicalDataValidatorCustomComplianceRules:
+    """Test add/remove/get_custom_compliance_rule and
+    get_available_compliance_templates."""
+
+    def test_add_get_remove_custom_compliance_rule_roundtrip(self):
+        validator = MedicalDataValidator(enable_compliance=True)
+
+        validator.add_custom_compliance_rule(
+            name="internal_id",
+            pattern=r"\bINT-\d{4}\b",
+            severity="high",
+            field_pattern="internal.*",
+            description="Internal ID leak",
+            recommendation="Redact internal IDs",
+        )
+
+        rules = validator.get_custom_compliance_rules()
+        assert len(rules) == 1
+        rule = rules[0]
+        assert rule["name"] == "internal_id"
+        assert rule["description"] == "Internal ID leak"
+        assert rule["pattern"] == r"\bINT-\d{4}\b"
+        assert rule["severity"] == "high"
+        assert rule["field_pattern"] == "internal.*"
+        assert rule["recommendation"] == "Redact internal IDs"
+
+        removed = validator.remove_custom_compliance_rule("internal_id")
+        assert removed is True
+        assert validator.get_custom_compliance_rules() == []
+
+    def test_remove_custom_compliance_rule_returns_false_when_not_found(self):
+        validator = MedicalDataValidator(enable_compliance=True)
+
+        assert validator.remove_custom_compliance_rule("does_not_exist") is False
+
+    def test_custom_compliance_rule_methods_noop_when_compliance_disabled(self):
+        validator = MedicalDataValidator(enable_compliance=False)
+        assert validator.compliance_engine is None
+
+        # Must not raise despite compliance_engine being None.
+        validator.add_custom_compliance_rule(name="whatever", pattern=r"\d+")
+
+        assert validator.get_custom_compliance_rules() == []
+        assert validator.remove_custom_compliance_rule("whatever") is False
+
+    def test_get_available_compliance_templates_returns_known_templates(self):
+        validator = MedicalDataValidator()
+
+        templates = validator.get_available_compliance_templates()
+
+        assert isinstance(templates, dict)
+        assert "clinical_trials" in templates
+        assert isinstance(templates["clinical_trials"], str)
+        assert templates["clinical_trials"]  # non-empty description
+
+    def test_get_available_compliance_templates_empty_when_template_manager_unavailable(self):
+        with patch("medical_data_validator.core.template_manager", None):
+            validator = MedicalDataValidator()
+
+            assert validator.get_available_compliance_templates() == {}
+
+
+class TestMedicalDataValidatorValidateEngineExceptionHandling:
+    """validate() must degrade gracefully -- adding a warning/info issue
+    instead of raising -- when the compliance/analytics engine collaborators
+    fail. The engines themselves are mocked to raise; the code under test
+    (validate()'s own try/except handling) runs for real."""
+
+    def test_validate_handles_compliance_engine_exception(self):
+        validator = MedicalDataValidator(
+            enable_compliance=True, enable_analytics=False, enable_monitoring=False
+        )
+        df = pd.DataFrame({"col1": [1, 2, 3]})
+
+        with patch.object(
+            validator.compliance_engine,
+            "comprehensive_compliance_validation",
+            side_effect=RuntimeError("compliance boom"),
+        ):
+            result = validator.validate(df)
+
+        # A warning-severity issue doesn't flip is_valid to False.
+        assert result.is_valid is True
+        warnings_found = result.get_issues_by_severity("warning")
+        assert len(warnings_found) == 1
+        assert warnings_found[0].rule_name == "compliance_engine"
+        assert "Compliance validation failed" in warnings_found[0].message
+        assert "compliance boom" in warnings_found[0].message
+        assert "compliance_report" not in result.summary
+
+    def test_validate_handles_analytics_engine_exception(self):
+        validator = MedicalDataValidator(
+            enable_compliance=False, enable_analytics=True, enable_monitoring=False
+        )
+        df = pd.DataFrame({"col1": [1, 2, 3]})
+
+        with patch.object(
+            validator.analytics_engine,
+            "comprehensive_analysis",
+            side_effect=ValueError("analytics boom"),
+        ):
+            result = validator.validate(df)
+
+        assert result.is_valid is True
+        info_found = result.get_issues_by_severity("info")
+        assert len(info_found) == 1
+        assert "Analytics analysis failed" in info_found[0].message
+        assert "analytics boom" in info_found[0].message
+        assert "analytics_report" not in result.summary
 
 
 class TestSchemaValidator:

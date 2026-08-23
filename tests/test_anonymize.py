@@ -90,3 +90,17 @@ class TestAnonymizeMethod:
     def test_column_count_preserved(self, validator, phi_df):
         result = validator.anonymize(phi_df)
         assert list(result.columns) == list(phi_df.columns)
+
+    def test_invalid_data_type_raises_value_error(self, validator):
+        with pytest.raises(ValueError, match="data must be"):
+            validator.anonymize(12345)  # type: ignore
+
+    def test_raises_runtime_error_when_data_anonymizer_unavailable(
+        self, validator, phi_df, monkeypatch
+    ):
+        import medical_data_validator.core as core_module
+
+        monkeypatch.setattr(core_module, "DataAnonymizer", None)
+
+        with pytest.raises(RuntimeError, match="DataAnonymizer is not available"):
+            validator.anonymize(phi_df)
