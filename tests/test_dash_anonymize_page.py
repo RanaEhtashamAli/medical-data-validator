@@ -71,3 +71,27 @@ def test_run_anonymize_from_upload_no_file_returns_error():
     success, message, records = _run_anonymize_from_upload(None, None, 'mask', '')
     assert success is False
     assert records is None
+
+
+@pytest.mark.parametrize("columns_csv", ["   ", "  ,  ", "\t"])
+def test_run_anonymize_from_upload_whitespace_only_columns_auto_detects(columns_csv):
+    """A stray space (or comma-separated blanks) in the Columns field must
+    behave exactly like an empty field — auto-detect PHI-like columns —
+    not silently degrade to an empty column list that anonymizes nothing
+    while still reporting success."""
+    from medical_data_validator.dashboard.pages.anonymize import _run_anonymize_from_upload
+    contents = _make_upload_contents(NAME_CSV)
+
+    auto_success, auto_message, auto_records = _run_anonymize_from_upload(
+        contents, 'patients.csv', 'mask', ''
+    )
+    whitespace_success, whitespace_message, whitespace_records = _run_anonymize_from_upload(
+        contents, 'patients.csv', 'mask', columns_csv
+    )
+
+    assert whitespace_success is True
+    assert whitespace_success == auto_success
+    assert whitespace_records == auto_records
+    # Explicitly confirm PHI actually got anonymized, not silently skipped.
+    assert whitespace_records[0]['name'] != 'John Smith'
+    assert whitespace_records[1]['name'] != 'Jane Doe'

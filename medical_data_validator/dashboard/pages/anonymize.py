@@ -115,8 +115,11 @@ def _decode_upload(contents, filename):
 def _run_anonymize_from_upload(contents, filename, method, columns_csv):
     """Decode the upload, anonymize it, and return (success, message, records).
 
-    `columns_csv` is split into a list on comma; a blank/empty value becomes
-    None, matching anonymize_dataframe()'s auto-detect-when-None contract.
+    `columns_csv` is split into a list on comma; a blank, empty, or
+    whitespace-only value becomes None, matching
+    anonymize_dataframe()'s auto-detect-when-None contract (a stray space
+    in the text box must not silently downgrade to an empty column list —
+    that would report success while leaving PHI unmasked).
     An unrecognized `method` is rejected up front (mirroring /api/anonymize's
     validation) so it never reaches MedicalDataValidator.anonymize() — which
     would otherwise raise a raw ValueError from DataAnonymizer.
@@ -129,7 +132,8 @@ def _run_anonymize_from_upload(contents, filename, method, columns_csv):
     except Exception as exc:
         return False, f"Could not parse {filename}: {exc}", None
 
-    columns = [c.strip() for c in columns_csv.split(',') if c.strip()] if columns_csv else None
+    parsed_columns = [c.strip() for c in columns_csv.split(',') if c.strip()] if columns_csv else []
+    columns = parsed_columns or None
 
     try:
         result_df = anonymize_dataframe(df, columns, method)
