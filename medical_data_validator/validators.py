@@ -221,7 +221,7 @@ class MedicalCodeValidator(ValidationRule):
             "icd10": r"^[A-Z]\d{2}(\.\d{1,2})?$",
             "icd9": r"^\d{3}(\.\d{1,2})?$",
             "loinc": r"^\d{1,5}-\d$",
-            "cpt": r"^\d{4}[A-Z]?$",
+            "cpt": r"^\d{5}$|^\d{4}[FT]$",
             "ndc": r"^\d{4}-\d{4}-\d{2}$",
         }
     

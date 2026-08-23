@@ -47,7 +47,7 @@ validator = MedicalCodeValidator({
 
 ```python
 # Validates CPT procedure codes
-# Format: 1234A
+# Format: 12345 (Category I) or 1234F/1234T (Category II/III)
 validator = MedicalCodeValidator({
     "procedure_code": "cpt"
 })

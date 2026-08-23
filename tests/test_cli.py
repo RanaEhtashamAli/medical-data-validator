@@ -740,8 +740,11 @@ class TestRunComplianceCheckBranches:
         import argparse
 
         csv_path = tmp_path / "data.csv"
-        # MedicalCodeValidator's "cpt" pattern is 4 digits + optional letter.
-        pd.DataFrame({"procedure_code": ["1234"]}).to_csv(csv_path, index=False)
+        # MedicalCodeValidator's "cpt" pattern accepts a real 5-digit
+        # Category I code (e.g. "99213") or a 4-digit Category II/III code
+        # suffixed with F or T. A bare 4-digit code with no letter (e.g.
+        # "1234") is NOT valid -- see test_cpt_four_digit_only_code_is_non_compliant.
+        pd.DataFrame({"procedure_code": ["99213"]}).to_csv(csv_path, index=False)
 
         args = argparse.Namespace(
             file=str(csv_path),
@@ -752,6 +755,27 @@ class TestRunComplianceCheckBranches:
 
         out = capsys.readouterr().out
         assert "CPT: Compliant (0 invalid codes)" in out
+
+    def test_cpt_four_digit_only_code_is_non_compliant(self, tmp_path, capsys):
+        """A bare 4-digit code with no F/T letter suffix (e.g. "1234") does
+        not match the fixed CPT regex and must be reported non-compliant --
+        this was wrongly reported compliant before the regex fix."""
+        from medical_data_validator.cli import run_compliance_check
+        import argparse
+
+        csv_path = tmp_path / "data.csv"
+        pd.DataFrame({"procedure_code": ["1234"]}).to_csv(csv_path, index=False)
+
+        args = argparse.Namespace(
+            file=str(csv_path),
+            standards=["cpt"],
+            output=None,
+        )
+        run_compliance_check(args)
+
+        out = capsys.readouterr().out
+        assert "CPT: Non-compliant" in out
+        assert "invalid codes" in out
 
     def test_output_writes_compliance_report_file(self, tmp_path, capsys):
         from medical_data_validator.cli import run_compliance_check

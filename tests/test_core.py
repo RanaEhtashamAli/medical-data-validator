@@ -892,18 +892,68 @@ class TestMedicalCodeValidator:
         assert "LOINC" in issues[0].message
     
     def test_cpt_validation(self):
-        """Test CPT code validation."""
+        """Test CPT code validation. Valid CPT codes are either 5-digit
+        Category I codes (e.g. "99213") or 4-digit Category II/III codes
+        suffixed with F or T (e.g. "1000F", "0042T"). A bare 4-digit code
+        with no letter (e.g. "1234") is NOT a valid CPT code."""
         validator = MedicalCodeValidator(code_columns={"procedure": "cpt"})
         df = pd.DataFrame({
-            "procedure": ["1234", "5678A", "INVALID", "9999"]
+            "procedure": ["99213", "1000F", "0042T", "1234", "INVALID"]
         })
-        
+
         issues = validator.validate(df)
-        
+
         assert len(issues) == 1
+        assert "Found 2 invalid CPT codes" in issues[0].message
+        assert "1234" in issues[0].message
         assert "INVALID" in issues[0].message
         assert "CPT" in issues[0].message
-    
+
+    def test_cpt_category_i_five_digit_code_is_valid(self):
+        """A real 5-digit Category I CPT code (e.g. "99213") is valid --
+        this is the vast majority of real-world CPT codes, and was
+        wrongly rejected before the regex was fixed to include \\d{5}."""
+        validator = MedicalCodeValidator(code_columns={"procedure": "cpt"})
+        df = pd.DataFrame({"procedure": ["99213", "93010", "80048"]})
+
+        issues = validator.validate(df)
+
+        assert issues == []
+
+    def test_cpt_four_digit_only_code_is_invalid(self):
+        """A bare 4-digit code with no letter suffix (e.g. "1234") does not
+        match either alternative of the fixed regex and must be reported
+        invalid -- this was wrongly accepted before the fix."""
+        validator = MedicalCodeValidator(code_columns={"procedure": "cpt"})
+        df = pd.DataFrame({"procedure": ["1234", "9999"]})
+
+        issues = validator.validate(df)
+
+        assert len(issues) == 1
+        assert "Found 2 invalid CPT codes" in issues[0].message
+
+    def test_cpt_category_ii_and_iii_codes_are_valid(self):
+        """Category II (performance measurement, suffix F) and Category III
+        (emerging technology, suffix T) codes are valid CPT codes."""
+        validator = MedicalCodeValidator(code_columns={"procedure": "cpt"})
+        df = pd.DataFrame({"procedure": ["1000F", "0042T"]})
+
+        issues = validator.validate(df)
+
+        assert issues == []
+
+    def test_cpt_four_digit_with_non_ft_letter_is_invalid(self):
+        """A 4-digit code with a letter suffix other than F/T (e.g. the
+        "1234A" example from the old, self-contradicting documentation) is
+        not a valid CPT code."""
+        validator = MedicalCodeValidator(code_columns={"procedure": "cpt"})
+        df = pd.DataFrame({"procedure": ["1234A", "5678A"]})
+
+        issues = validator.validate(df)
+
+        assert len(issues) == 1
+        assert "Found 2 invalid CPT codes" in issues[0].message
+
     def test_ndc_validation(self):
         """Test NDC code validation."""
         validator = MedicalCodeValidator(code_columns={"medication": "ndc"})
