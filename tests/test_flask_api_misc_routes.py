@@ -73,6 +73,19 @@ class TestTrivialRoutes:
         # Unlike /api/health, the legacy endpoint has no standards_supported key.
         assert 'standards_supported' not in body
 
+    def test_bare_root_redirects_to_home(self, client):
+        # "/" has no @app.route of its own — flask_restx.Api (constructed
+        # with no prefix) already owns that endpoint name ("root") and always
+        # 404s there by design, so the redirect is implemented via the 404
+        # handler instead. Guard against that wiring regressing silently.
+        resp = client.get('/')
+        assert resp.status_code == 302
+        assert resp.headers['Location'] == '/home'
+
+    def test_unknown_path_still_404s(self, client):
+        resp = client.get('/this-path-does-not-exist')
+        assert resp.status_code == 404
+
     def test_home_renders_html(self, client):
         resp = client.get('/home')
         assert resp.status_code == 200

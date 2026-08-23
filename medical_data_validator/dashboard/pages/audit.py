@@ -8,8 +8,6 @@ from medical_data_validator.audit import query_log, count_log
 
 register_page_once(__name__, path='/audit', name='Audit Log')
 
-DASH_TENANT = 'default'
-
 layout = dbc.Container([
     html.H2("Audit Log"),
     html.Div(id='audit-count-message', className='mb-2'),
@@ -23,7 +21,14 @@ layout = dbc.Container([
 ], fluid=True)
 
 
-def _list_audit_log_table_data(tenant=DASH_TENANT, limit=100):
+def _list_audit_log_table_data(tenant=None, limit=100):
+    # Unlike the Registry/Jobs pages, don't default-filter to a fixed tenant:
+    # validate()/anonymize()'s auto-audit-logging (core.py) tags records with
+    # flask.g.tenant, which is only ever set by the JWT-authenticated REST
+    # routes — Dash callbacks and background job-worker threads have no such
+    # context, so their audit rows land with tenant=None. Filtering to a
+    # fixed tenant here would make this page permanently show zero records
+    # for everything the Dash UI itself does.
     records = query_log(tenant=tenant, limit=limit)
     return [
         {
@@ -36,7 +41,7 @@ def _list_audit_log_table_data(tenant=DASH_TENANT, limit=100):
     ]
 
 
-def _count_audit_log(tenant=DASH_TENANT):
+def _count_audit_log(tenant=None):
     return count_log(tenant=tenant)
 
 

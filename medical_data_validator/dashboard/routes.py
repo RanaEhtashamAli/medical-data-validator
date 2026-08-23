@@ -10,7 +10,7 @@ import os
 import tempfile
 import traceback
 from pathlib import Path
-from flask import render_template, request, jsonify, Blueprint, current_app
+from flask import render_template, request, jsonify, Blueprint, current_app, redirect
 import pandas as pd
 import numpy as np
 import json
@@ -1349,6 +1349,19 @@ def register_routes(app):
             """
     
     # UI Routes
+    # flask-restx's Api (constructed with no prefix, above) auto-registers
+    # its own view at the bare "/" under the hardcoded endpoint name "root",
+    # which always aborts 404 by design (nothing is mounted at the Api's own
+    # root). That means "/" can't get a normal @app.route of its own without
+    # colliding on the endpoint name — redirect it from the 404 handler
+    # instead, which still runs since abort(404) raises the same exception
+    # Flask's error handling processes.
+    @app.errorhandler(404)
+    def _redirect_bare_root_else_404(e):
+        if request.path == '/':
+            return redirect('/home')
+        return e
+
     @app.route('/home')
     def index():
         return render_template('index.html')

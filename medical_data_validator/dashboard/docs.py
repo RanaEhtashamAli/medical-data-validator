@@ -366,14 +366,15 @@ def create_swagger_api(app):
         - **API Versioning**: Backward compatible with v1.0 endpoints
         
         ## Authentication
-        Currently, the API operates without authentication for development. 
-        For production deployment, implement appropriate authentication mechanisms.
-        
+        Validation, compliance, security, and analytics endpoints run without authentication.
+        Auth, Registry, Jobs, Reports, and Audit endpoints require a JWT — obtain one from
+        POST /api/auth/token and send it as `Authorization: Bearer <token>`.
+
         ## Rate Limiting
         - Standard endpoints: 100 requests per minute
         - File upload endpoints: 10 requests per minute
         - Analytics endpoints: 50 requests per minute
-        
+
         ## API Versions
         - **v1.2 endpoints**: `/api/v1.2/*` (recommended)
         - **Legacy v1.0 endpoints**: `/api/*` (backward compatible)
