@@ -347,6 +347,13 @@ class TestRoleRequiredMultiRoleFix:
     specific downstream route, so the fix has one authoritative
     source-level regression test rather than living only inside three
     unrelated REST API test files.
+
+    Note a second, related footgun the min()-based fix introduces on its
+    own: ROLE_HIERARCHY.get(r, 0) resolves an unknown/typo'd role name to
+    level 0, and min() propagates that 0 straight through -- silently
+    admitting every authenticated caller. role_required() now validates its
+    role names eagerly (at decoration time) to guard against this; see
+    test_role_required_raises_on_unknown_role_name below.
     """
 
     def test_role_required_multi_role_decorator_allows_any_named_role(self):
@@ -383,3 +390,29 @@ class TestRoleRequiredMultiRoleFix:
         # read-only (level 1) still correctly fails: min(2, 3) = 2 is still
         # above read-only's level, so the fix doesn't over-widen access.
         assert readonly_resp.status_code == 403
+
+    def test_role_required_raises_on_unknown_role_name(self):
+        """min()'s own footgun: ROLE_HIERARCHY.get(r, 0) resolves an unknown
+        role name to level 0, and min() would propagate that 0 straight
+        through as required_level -- meaning a typo'd role name (e.g.
+        'data-stewart' instead of 'data-steward') would silently admit
+        EVERY authenticated caller, including read-only. (The old max()
+        based check happened to fail closed on the same typo, admitting
+        only admin -- so this footgun is new with the min() fix and must be
+        guarded against explicitly.)
+
+        role_required() must instead validate its role names eagerly, at
+        decoration time (i.e. when the module defining the route is
+        imported), so a typo raises immediately at startup rather than
+        shipping a silently-too-permissive endpoint that no test would
+        catch at runtime."""
+        with pytest.raises(ValueError, match="unknown role"):
+            auth.role_required('admin', 'data-stewart')  # typo, not a real role
+
+    def test_role_required_accepts_all_real_role_names(self):
+        """Sanity check that the new validation doesn't reject legitimate
+        role names -- every real role in ROLES/ROLE_HIERARCHY, alone or in
+        combination, must decorate cleanly without raising."""
+        for role in auth.ROLES:
+            auth.role_required(role)  # must not raise
+        auth.role_required('data-steward', 'admin')  # must not raise

@@ -135,7 +135,24 @@ def login_required(f):
 
 
 def role_required(*required_roles: str):
-    """Decorator: require the caller to have one of the specified roles."""
+    """Decorator: require the caller's role level to be at least that of the
+    lowest-ranked named role (e.g. role_required('data-steward', 'admin')
+    admits both data-steward and admin, since data-steward is the
+    lowest-ranked of the two -- it does NOT mean literal membership in the
+    named set).
+
+    Raises ValueError immediately (at decoration time, i.e. when the module
+    defining the route is imported) if any named role isn't a real key in
+    ROLE_HIERARCHY, so a typo fails loudly at startup instead of silently
+    resolving to level 0 and admitting every authenticated caller.
+    """
+    unknown = [r for r in required_roles if r not in ROLE_HIERARCHY]
+    if unknown:
+        raise ValueError(
+            f"role_required() got unknown role(s): {unknown}. "
+            f"Valid roles: {list(ROLE_HIERARCHY)}"
+        )
+
     def decorator(f):
         @wraps(f)
         @login_required

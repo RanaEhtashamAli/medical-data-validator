@@ -162,15 +162,18 @@ class TestCoreIntegration:
 
 
 class TestGetAuditLogRoute:
-    """Minimal REST-route regression test for GET /api/audit
+    """Minimal REST-route regression tests for GET /api/audit
     (register_audit_routes' get_audit_log), which was previously untested
     at the HTTP layer. get_audit_log is decorated with
     `@role_required('data-steward', 'admin')`; before the role_required()
     fix (auth.py's min()-vs-max() bug), a data-steward -- despite being
     explicitly named as an allowed role -- was incorrectly rejected with
-    403. This is a lightweight happy-path check that a data-steward can now
-    reach the endpoint; broader coverage of get_audit_log's filtering was
-    not part of this effort's original scope."""
+    403. Covers a lightweight happy-path check that a data-steward can now
+    reach the endpoint, plus a negative/cross-tenant test proving the
+    endpoint's non-admin tenant clamp (previously dead code, unreachable
+    for the same reason) actually works now that it's reachable. Broader
+    coverage of get_audit_log's filtering was not part of this effort's
+    original scope."""
 
     def test_data_steward_can_get_audit_log(self):
         from medical_data_validator.dashboard.app import create_dashboard_app
@@ -193,5 +196,47 @@ class TestGetAuditLogRoute:
                 body = resp.get_json()
                 assert 'total' in body
                 assert 'records' in body
+        finally:
+            auth._USERS.pop(username, None)
+
+    def test_data_steward_tenant_query_param_is_ignored_for_other_tenant(self):
+        """Regression test for previously-dead code: get_audit_log's
+        non-admin branch (`tenant_filter = args.get('tenant') if g.role ==
+        'admin' else g.tenant`, audit.py:215) was unreachable before the
+        role_required() fix -- only admin could ever pass the decorator,
+        and admin's branch always takes the query-param path regardless.
+        Now that a data-steward can reach this endpoint, this is the first
+        test to exercise the non-admin branch: a data-steward from tenant A
+        must not be able to use ?tenant=<tenant-B> to read tenant B's audit
+        records -- the override must be genuinely discarded, not merely
+        return 200."""
+        from medical_data_validator.dashboard.app import create_dashboard_app
+
+        audit.log_event('validation', tenant='audit-route-tenant-a')
+        audit.log_event('validation', tenant='audit-route-tenant-b')
+        audit.log_event('validation', tenant='audit-route-tenant-b')
+
+        username = 'audit-route-steward-a'
+        if username not in auth._USERS:
+            auth.create_user_account(username, 'password123', role='data-steward', tenant='audit-route-tenant-a')
+        try:
+            app = create_dashboard_app()
+            app.config['TESTING'] = True
+            with app.test_client() as client:
+                token_resp = client.post('/api/auth/token', json={
+                    'username': username, 'password': 'password123',
+                })
+                assert token_resp.status_code == 200
+                token = token_resp.get_json()['access_token']
+
+                resp = client.get(
+                    '/api/audit?tenant=audit-route-tenant-b',
+                    headers={'Authorization': f'Bearer {token}'},
+                )
+                assert resp.status_code == 200
+                body = resp.get_json()
+                tenants_seen = {r['tenant'] for r in body['records']}
+                assert 'audit-route-tenant-b' not in tenants_seen
+                assert tenants_seen <= {'audit-route-tenant-a'}
         finally:
             auth._USERS.pop(username, None)
