@@ -231,6 +231,23 @@ class TestCustomTemplateAppliedOptInViaV12Compliance:
         assert body['success'] is True
         assert self.RULE_ID not in self._rule_ids(body['compliance_report'])
 
+    def test_with_template_param_sets_template_applied_to_the_custom_name(self, client):
+        """apply_to_engine() only adds the template's rules to the engine --
+        unlike the built-in path (core.py sets this when compliance_template=
+        reaches MedicalDataValidator directly), nothing else sets
+        template_applied for a custom template. Regression test for a gap
+        found during live verification: the rules fired correctly, but the
+        response's own 'template_applied' field stayed None, which would
+        read as "no template was used" even though one plainly was."""
+        resp = client.post(
+            '/api/compliance/v1.2',
+            data={'file': (self._csv(), 'test.csv'), 'template': self.TEMPLATE_NAME},
+            content_type='multipart/form-data',
+        )
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body['compliance_report']['template_applied'] == self.TEMPLATE_NAME
+
     def test_unknown_template_name_returns_400(self, client):
         resp = client.post(
             '/api/compliance/v1.2',

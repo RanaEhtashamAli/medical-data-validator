@@ -704,6 +704,12 @@ def build_v1_2_compliance_report(df: pd.DataFrame, template: Optional[str] = Non
                 [CustomComplianceRule(**r) for r in custom_template['rules']],
             )
             built.apply_to_engine(validator.compliance_engine)
+            # apply_to_engine() only adds the rules -- unlike the built-in path
+            # (core.py sets this when compliance_template= reaches
+            # MedicalDataValidator directly), nothing else sets template_applied
+            # for a custom template, so it would otherwise stay None even
+            # though the template's rules genuinely fired.
+            validator.compliance_engine.template_applied = custom_template['name']
 
     # Optionally load all discovered compliance plugins (built-in + third-party)
     # before validate() runs.
