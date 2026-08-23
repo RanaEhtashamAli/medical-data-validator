@@ -644,15 +644,126 @@ def api_compliance_check():
         }), 500
 
 
+# Built-in compliance template names (must match compliance_templates.py's
+# ComplianceTemplateManager._create_default_templates() exactly).
+_BUILTIN_COMPLIANCE_TEMPLATE_NAMES = {'clinical_trials', 'ehr', 'laboratory', 'imaging', 'research'}
+
+
+def build_v1_2_compliance_report(df: pd.DataFrame, template: Optional[str] = None,
+                                   use_plugins: bool = False) -> Dict[str, Any]:
+    """Resolve template (built-in or custom) + optional plugins + the
+    always-on custom-rules loop, run validate(), return the flattened
+    compliance_report dict (+ 'plugins_applied'). Shared by
+    api_v1_2_compliance() and the future Compliance Dash page.
+    """
+    built_in_names = _BUILTIN_COMPLIANCE_TEMPLATE_NAMES
+
+    # Create validator with v1.2 compliance enabled. compliance_template=
+    # (consumed by MedicalDataValidator/ComplianceTemplateManager.apply_template)
+    # only understands the 5 built-ins, so a custom-template name must never
+    # be passed through here.
+    try:
+        validator = create_validator(
+            detect_phi=True, quality_checks=True, profile='', enable_compliance=True,
+            template=template if template in built_in_names else None,
+        )
+    except Exception as validator_error:
+        logger.exception("Failed to create validator: %s", validator_error)
+        raise RuntimeError(f"Failed to create validator: {validator_error}") from validator_error
+
+    # A truthy template that isn't a built-in must be a saved custom template.
+    if template and template not in built_in_names:
+        custom_template = _get_custom_template(template)
+        if custom_template is None:
+            # apply_template() silently no-ops on an unrecognized built-in name
+            # (ComplianceTemplateManager.apply_template() just returns False,
+            # and MedicalDataValidator.__init__ never checks that return value).
+            # Silently matching that here would hide a real user mistake --
+            # unlike a built-in, there's no fixed list of custom template names
+            # the caller could have consulted -- so this is raised as an
+            # explicit, caller-visible error instead.
+            raise ValueError(f"Unknown compliance template: '{template}'")
+        if validator.compliance_engine is not None:
+            from ..compliance import CustomComplianceRule
+            from ..compliance_templates import ComplianceTemplateManager
+            tm = ComplianceTemplateManager()  # local, throwaway instance
+            built = tm.create_custom_template(
+                custom_template['name'], custom_template['description'],
+                [CustomComplianceRule(**r) for r in custom_template['rules']],
+            )
+            built.apply_to_engine(validator.compliance_engine)
+
+    # Optionally load all discovered compliance plugins (built-in + third-party)
+    # before validate() runs.
+    if use_plugins and validator.compliance_engine is not None:
+        from ..plugins import load_compliance_plugins
+        load_compliance_plugins(engine=validator.compliance_engine)
+
+    # Apply custom rules from global storage (unconditional, unrelated to templates)
+    if validator.compliance_engine is not None:
+        for rule_data in _custom_rules_storage:
+            validator.compliance_engine.add_custom_pattern(
+                name=rule_data['name'],
+                pattern=rule_data['pattern'],
+                severity=rule_data['severity'],
+                field_pattern=rule_data.get('field_pattern'),
+                description=rule_data.get('description', ''),
+                recommendation=rule_data.get('recommendation')
+            )
+
+    # Validate data
+    try:
+        result = validator.validate(df)
+    except Exception as validation_error:
+        logger.exception("Validation failed: %s", validation_error)
+        raise RuntimeError(f"Validation failed: {validation_error}") from validation_error
+
+    # Get v1.2 compliance report
+    compliance_report = result.summary.get('compliance_report', {})
+
+    # Flatten the structure to match test expectations
+    if 'standards' in compliance_report:
+        standards = compliance_report['standards']
+        if isinstance(standards, dict):
+            flattened_report = {
+                'hipaa': standards.get('hipaa', {}),
+                'gdpr': standards.get('gdpr', {}),
+                'fda': standards.get('fda', {}),
+                'medical_coding': standards.get('medical_coding', {}),
+                'overall_score': compliance_report.get('overall_score', 0),
+                'risk_level': compliance_report.get('risk_level', 'low'),
+                'all_violations': compliance_report.get('all_violations', []),
+                'template_applied': compliance_report.get('template_applied')
+            }
+            # Bug fix: comprehensive_compliance_validation() already merges any
+            # registered plugin's standard report (e.g. 'fhir_r4') into
+            # `standards`, but the flattening above only ever copied the 4
+            # known keys -- silently dropping every plugin standard. Copy over
+            # anything else verbatim.
+            known = {'hipaa', 'gdpr', 'fda', 'medical_coding'}
+            for standard_name, standard_data in standards.items():
+                if standard_name not in known:
+                    flattened_report[standard_name] = standard_data
+            compliance_report = flattened_report
+
+    compliance_report['plugins_applied'] = (
+        validator.compliance_engine.list_plugins()
+        if use_plugins and validator.compliance_engine is not None
+        else []
+    )
+
+    return compliance_report
+
+
 def api_v1_2_compliance():
     try:
         if 'file' not in request.files:
             return jsonify({"success": False, "error": "No file provided"}), 400
-        
+
         file = request.files['file']
         if file.filename == '':
             return jsonify({"success": False, "error": "No file selected"}), 400
-        
+
         # Read file
         try:
             if file.filename.endswith('.csv'):
@@ -663,10 +774,11 @@ def api_v1_2_compliance():
                 return jsonify({"success": False, "error": "Unsupported file format"}), 400
         except Exception as e:
             return jsonify({"success": False, "error": f"Failed to read file: {str(e)}"}), 500
-        
-        # Get template from request
+
+        # Get template/plugin options from request
         template = request.form.get('template')
-        
+        use_plugins = request.form.get('use_plugins', 'false').lower() == 'true'
+
         # Handle empty dataframe
         if df.empty:
             return jsonify({
@@ -683,64 +795,16 @@ def api_v1_2_compliance():
                     'template_applied': template
                 }
             })
-        
-        # Create validator with v1.2 compliance enabled and optional template
+
         try:
-            validator = create_validator(detect_phi=True, quality_checks=True, profile='', enable_compliance=True, template=template)
-        except Exception as validator_error:
-            logger.exception("Failed to create validator: %s", validator_error)
-            return jsonify({
-                "success": False,
-                "error": f"Failed to create validator: {str(validator_error)}",
-                "traceback": traceback.format_exc() if current_app.debug else None,
-            }), 500
-        
-        # Apply custom rules from global storage
-        if validator.compliance_engine is not None:
-            for rule_data in _custom_rules_storage:
-                validator.compliance_engine.add_custom_pattern(
-                    name=rule_data['name'],
-                    pattern=rule_data['pattern'],
-                    severity=rule_data['severity'],
-                    field_pattern=rule_data.get('field_pattern'),
-                    description=rule_data.get('description', ''),
-                    recommendation=rule_data.get('recommendation')
-                )
-        
-        # Validate data
-        try:
-            result = validator.validate(df)
-        except Exception as validation_error:
-            logger.exception("Validation failed: %s", validation_error)
-            return jsonify({
-                "success": False,
-                "error": f"Validation failed: {str(validation_error)}",
-                "traceback": traceback.format_exc() if current_app.debug else None,
-            }), 500
-        
-        # Get v1.2 compliance report
-        compliance_report = result.summary.get('compliance_report', {})
-        
-        # Flatten the structure to match test expectations
-        if 'standards' in compliance_report:
-            standards = compliance_report['standards']
-            if isinstance(standards, dict):
-                flattened_report = {
-                    'hipaa': standards.get('hipaa', {}),
-                    'gdpr': standards.get('gdpr', {}),
-                    'fda': standards.get('fda', {}),
-                    'medical_coding': standards.get('medical_coding', {}),
-                    'overall_score': compliance_report.get('overall_score', 0),
-                    'risk_level': compliance_report.get('risk_level', 'low'),
-                    'all_violations': compliance_report.get('all_violations', []),
-                    'template_applied': compliance_report.get('template_applied')
-                }
-                compliance_report = flattened_report
-        
+            report = build_v1_2_compliance_report(df, template=template, use_plugins=use_plugins)
+        except ValueError as e:
+            return jsonify({"success": False, "error": str(e)}), 400
+
         return jsonify({
             "success": True,
             "message": "v1.2 Advanced Compliance Validation Complete",
-            "compliance_report": compliance_report
+            "compliance_report": report
         })
     except Exception as e:
         logger.exception("Unhandled error: %s", e)
@@ -764,6 +828,26 @@ def api_templates():
         return jsonify(template_list)
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+def api_compliance_plugins():
+    """List compliance plugins discovered via the
+    'medical_data_validator.compliance_plugins' entry-point group."""
+    from ..plugins import discover_plugins
+    try:
+        plugins = discover_plugins()
+        result = []
+        for p in plugins:
+            doc = (type(p).__doc__ or '').strip()
+            result.append({
+                'name': p.name,
+                'class_name': type(p).__name__,
+                'module': type(p).__module__,
+                'description': doc.split('\n')[0].strip() if doc else None,
+            })
+        return jsonify({'success': True, 'plugins': result, 'count': len(result)})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 # Custom compliance rules, shared across worker processes via SQLite. A
@@ -797,6 +881,12 @@ def _get_custom_rules_conn() -> sqlite3.Connection:
                 field_pattern TEXT,
                 description   TEXT,
                 recommendation TEXT
+            );
+            CREATE TABLE IF NOT EXISTS custom_templates (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT NOT NULL UNIQUE,
+                description TEXT,
+                rules_json  TEXT NOT NULL
             );
         """)
         _custom_rules_conn.commit()
@@ -926,6 +1016,109 @@ def api_remove_custom_rule(rule_name):
                 })
         
         return jsonify({"success": False, "error": f'Rule "{rule_name}" not found'}), 404
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# Custom compliance TEMPLATES (distinct from the read-only, built-in-only
+# GET /api/compliance/templates above) -- a named, reusable bundle of custom
+# rules, stored in the `custom_templates` table of the same custom_rules.db
+# SQLite file/connection as _custom_rules_storage.
+
+def _list_custom_templates() -> List[Dict[str, Any]]:
+    """Return all saved custom templates as {'name', 'description', 'rules'} dicts."""
+    rows = _get_custom_rules_conn().execute(
+        "SELECT name, description, rules_json FROM custom_templates ORDER BY id"
+    ).fetchall()
+    return [
+        {'name': r['name'], 'description': r['description'], 'rules': json.loads(r['rules_json'])}
+        for r in rows
+    ]
+
+
+def _get_custom_template(name: str) -> Optional[Dict[str, Any]]:
+    """Return a single saved custom template by name, or None if not found."""
+    row = _get_custom_rules_conn().execute(
+        "SELECT name, description, rules_json FROM custom_templates WHERE name = ?", (name,)
+    ).fetchone()
+    if row is None:
+        return None
+    return {'name': row['name'], 'description': row['description'], 'rules': json.loads(row['rules_json'])}
+
+
+def _upsert_custom_template(name: str, description: Optional[str], rules: List[dict]) -> None:
+    """Create or replace a custom template by name."""
+    with _custom_rules_lock:
+        conn = _get_custom_rules_conn()
+        conn.execute(
+            "INSERT INTO custom_templates (name, description, rules_json) VALUES (?, ?, ?) "
+            "ON CONFLICT(name) DO UPDATE SET description = excluded.description, "
+            "rules_json = excluded.rules_json",
+            (name, description, json.dumps(rules)),
+        )
+        conn.commit()
+
+
+def _delete_custom_template(name: str) -> bool:
+    """Delete a custom template by name. Returns True if a row was deleted."""
+    with _custom_rules_lock:
+        conn = _get_custom_rules_conn()
+        cur = conn.execute("DELETE FROM custom_templates WHERE name = ?", (name,))
+        conn.commit()
+        return cur.rowcount > 0
+
+
+def api_custom_templates():
+    """Get custom compliance templates."""
+    return jsonify(_list_custom_templates())
+
+
+def api_add_custom_template():
+    """Add (or update, by name) a custom compliance template."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No data provided"}), 400
+
+        if not data.get('name'):
+            return jsonify({"success": False, "error": "Missing required field: name"}), 400
+
+        rules = data.get('rules')
+        if not isinstance(rules, list) or len(rules) == 0:
+            return jsonify({"success": False, "error": "Missing required field: rules"}), 400
+
+        for rule in rules:
+            if not isinstance(rule, dict) or 'name' not in rule or 'pattern' not in rule:
+                return jsonify({
+                    "success": False,
+                    "error": "Each rule requires at least 'name' and 'pattern'",
+                }), 400
+
+        normalized_rules = [
+            {
+                'name': rule['name'],
+                'pattern': rule['pattern'],
+                'severity': rule.get('severity', 'medium'),
+                'field_pattern': rule.get('field_pattern'),
+                'description': rule.get('description', ''),
+                'recommendation': rule.get('recommendation'),
+            }
+            for rule in rules
+        ]
+
+        _upsert_custom_template(data['name'], data.get('description', ''), normalized_rules)
+
+        return jsonify({"success": True, "message": f"Custom template '{data['name']}' saved"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+def api_remove_custom_template(name):
+    """Remove a custom compliance template."""
+    try:
+        if _delete_custom_template(name):
+            return jsonify({"success": True, "message": f'Template "{name}" removed successfully'})
+        return jsonify({"success": False, "error": f'Template "{name}" not found'}), 404
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -1199,6 +1392,26 @@ def create_api_blueprint():
     def api_templates_endpoint():
         """Get available compliance templates."""
         return api_templates()
+
+    @api_bp.route('/compliance/plugins', methods=['GET'])
+    def api_compliance_plugins_endpoint():
+        """List discovered compliance plugins."""
+        return api_compliance_plugins()
+
+    @api_bp.route('/compliance/custom-templates', methods=['GET'])
+    def api_custom_templates_endpoint():
+        """Get custom compliance templates."""
+        return api_custom_templates()
+
+    @api_bp.route('/compliance/custom-templates', methods=['POST'])
+    def api_add_custom_template_endpoint():
+        """Add a custom compliance template."""
+        return api_add_custom_template()
+
+    @api_bp.route('/compliance/custom-templates/<name>', methods=['DELETE'])
+    def api_remove_custom_template_endpoint(name):
+        """Remove a custom compliance template."""
+        return api_remove_custom_template(name)
 
     @api_bp.route('/compliance/custom-rules', methods=['GET'])
     def api_custom_rules_endpoint():
