@@ -1123,6 +1123,17 @@ def api_remove_custom_template(name):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+def anonymize_dataframe(df: pd.DataFrame, columns: Optional[List[str]], method: str) -> pd.DataFrame:
+    """Anonymize `columns` of `df` (None = auto-detect PHI-like columns) using
+    `method`. Shared by /api/anonymize and the Anonymize Dash page so both
+    construct the validator with the same disabled-engine flags — compliance,
+    analytics, and monitoring are irrelevant to a plain anonymization call."""
+    validator = MedicalDataValidator(
+        enable_compliance=False, enable_analytics=False, enable_monitoring=False
+    )
+    return validator.anonymize(df, columns=columns, method=method)
+
+
 def api_anonymize():
     """Anonymize PHI/PII columns in uploaded data or JSON payload."""
     try:
@@ -1150,8 +1161,7 @@ def api_anonymize():
 
         columns = [c.strip() for c in columns_raw.split(',')] if isinstance(columns_raw, str) else columns_raw
 
-        validator = MedicalDataValidator(enable_compliance=False, enable_analytics=False, enable_monitoring=False)
-        anonymized_df = validator.anonymize(df, columns=columns, method=method)
+        anonymized_df = anonymize_dataframe(df, columns, method)
 
         return jsonify({
             'success': True,
